@@ -1,12 +1,61 @@
 $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
-$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.2'
+$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.3'
 $TempZip = Join-Path $env:TEMP 'auto-director-main.zip'
 $TempExtract = Join-Path $env:TEMP ('auto-director-install-' + [guid]::NewGuid().ToString('N'))
-$ExpectedAgentVersion = [version]'2.2'
+$ExpectedAgentVersion = [version]'2.3'
 $AgentStatusUrl = 'http://127.0.0.1:8765/status'
 $AgentStopUrl = 'http://127.0.0.1:8765/stop'
+
+function Test-RealPython([string]$Path) {
+  if (-not $Path -or -not (Test-Path $Path)) { return $false }
+  $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+  try {
+    & $Path -c "import sys; raise SystemExit(0 if sys.version_info >= (3,10) else 2)" 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  } catch { return $false }
+  finally { $ErrorActionPreference=$old }
+}
+
+function Resolve-RealPython {
+  $candidates = New-Object System.Collections.Generic.List[string]
+  foreach($p in @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python313\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python312\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python311\python.exe')
+  )) { if($p){$candidates.Add($p)} }
+  try {
+    Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Python') -Directory -ErrorAction SilentlyContinue |
+      Sort-Object Name -Descending | ForEach-Object {
+        $p=Join-Path $_.FullName 'python.exe'; if(Test-Path $p){$candidates.Add($p)}
+      }
+  } catch {}
+  try {
+    $cmd=Get-Command python.exe -ErrorAction SilentlyContinue
+    if($cmd -and $cmd.Source -and $cmd.Source -notmatch '\\WindowsApps\\'){ $candidates.Add($cmd.Source) }
+  } catch {}
+  foreach($p in $candidates){ if(Test-RealPython $p){ return $p } }
+  try {
+    $py=Get-Command py.exe -ErrorAction SilentlyContinue
+    if($py){
+      foreach($selector in @('-3.13','-3.12','-3.11','-3')){
+        $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+        try {
+          $resolved=& $py.Source $selector -c "import sys; print(sys.executable)" 2>$null
+          if($LASTEXITCODE -eq 0 -and $resolved){
+            $path=([string]($resolved | Select-Object -Last 1)).Trim()
+            if(Test-RealPython $path){ return $path }
+          }
+        } catch {} finally {$ErrorActionPreference=$old}
+      }
+    }
+  } catch {}
+  return $null
+}
 
 function Stop-PreviousAutoDirector {
   Write-Host 'Arrêt de l ancien agent/worker...' -ForegroundColor Cyan
@@ -38,13 +87,23 @@ function Wait-ForAgent {
 Write-Host '=== Auto Director - installation / mise a jour du worker PC ===' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-  Write-Host 'Python 3.12 absent. Installation automatique...' -ForegroundColor Yellow
-  if (Get-Command winget -ErrorAction SilentlyContinue) {
-    winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
-    $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
-  } else { throw 'Python 3.12 est requis et winget n est pas disponible sur ce PC.' }
+$PythonExe=Resolve-RealPython
+if (-not $PythonExe) {
+  Write-Host 'Python réel 3.12 absent. Installation automatique...' -ForegroundColor Yellow
+  $winget=Get-Command winget.exe -ErrorAction SilentlyContinue
+  if (-not $winget) { throw 'Python 3.12 est requis et winget n est pas disponible sur ce PC.' }
+  $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+  try {
+    & $winget.Source install -e --id Python.Python.3.12 --scope user --accept-source-agreements --accept-package-agreements
+    $wingetCode=$LASTEXITCODE
+  } finally {$ErrorActionPreference=$old}
+  if($wingetCode -ne 0 -and $wingetCode -ne -1978335189){ throw 'Installation automatique de Python 3.12 impossible.' }
+  $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+  Start-Sleep -Seconds 2
+  $PythonExe=Resolve-RealPython
+  if(-not $PythonExe){ throw 'Python a été installé mais reste introuvable. Redémarre Windows puis relance cet installateur.' }
 }
+Write-Host "Python valide: $PythonExe" -ForegroundColor Green
 
 Stop-PreviousAutoDirector
 Write-Host 'Téléchargement de la dernière version...' -ForegroundColor Cyan
@@ -67,13 +126,25 @@ $Runner = Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
 if (-not (Test-Path $Agent)) { throw 'Agent local introuvable dans le package.' }
 if (-not (Test-Path $Runner)) { throw 'Runner worker introuvable dans le package.' }
 
+# Persist the resolved interpreter path for the launcher. This bypasses the
+# misleading Windows Store python.exe alias entirely.
+[Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON',$PythonExe,'User')
+$env:AUTO_DIRECTOR_PYTHON=$PythonExe
+
 $StartupDir = [Environment]::GetFolderPath('Startup')
 $StartupCmd = Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd'
-$cmd = "@echo off`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"`r`n"
+$cmd = "@echo off`r`nset `"AUTO_DIRECTOR_PYTHON=$PythonExe`"`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"`r`n"
 Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
 
 Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
-Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$Agent) -WindowStyle Hidden
+$psi=New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName='powershell.exe'
+$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`""
+$psi.UseShellExecute=$false
+$psi.CreateNoWindow=$true
+$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
+$proc=[System.Diagnostics.Process]::Start($psi)
+if(-not $proc){throw 'Impossible de démarrer le nouvel agent.'}
 $status = Wait-ForAgent
 
 try { Remove-Item $TempZip -Force -ErrorAction SilentlyContinue } catch {}
@@ -82,5 +153,5 @@ try { Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue } c
 Write-Host ''
 Write-Host ("Installation terminée. Agent PC version " + $status.agentVersion + " actif.") -ForegroundColor Green
 Write-Host 'Retourne dans Auto Director puis clique sur Démarrer le worker PC.' -ForegroundColor Green
-Write-Host 'Le journal de diagnostic est maintenant écrit en UTF-8 et lisible dans le Studio.' -ForegroundColor DarkGray
+Write-Host 'Python réel est maintenant détecté explicitement; l alias Microsoft Store est ignoré.' -ForegroundColor DarkGray
 Start-Sleep -Seconds 4
