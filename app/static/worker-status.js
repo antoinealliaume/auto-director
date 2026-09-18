@@ -1,8 +1,8 @@
 (()=>{
   const STATUS_URL='/api/worker-status';
   const LOCAL_AGENT_URL='http://127.0.0.1:8765';
-  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.2';
-  const MIN_AGENT_VERSION=2.2;
+  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.3';
+  const MIN_AGENT_VERSION=2.3;
   const byId=id=>document.getElementById(id);
   const safe=v=>v==null?'—':String(v);
   let agentState={online:false,workerRunning:false,busy:false,version:'',needsUpdate:false,lastError:'',logTail:''};
@@ -23,7 +23,7 @@
     b.disabled=!!agentState.busy;b.className='worker-control-btn';
     if(agentState.busy){b.textContent='Patiente…';s.textContent='Agent PC : opération en cours';return}
     if(!agentState.online){b.classList.add('install');b.textContent='⬇ Installer le worker PC';s.textContent='Agent PC : non installé';return}
-    if(agentState.needsUpdate){b.classList.add('install');b.textContent='↻ Mettre à jour le worker PC';s.textContent=`Agent PC ${agentState.version||'ancien'} : mise à jour 2.2 requise`;return}
+    if(agentState.needsUpdate){b.classList.add('install');b.textContent='↻ Mettre à jour le worker PC';s.textContent=`Agent PC ${agentState.version||'ancien'} : mise à jour 2.3 requise`;return}
     if(agentState.workerRunning){b.classList.add('stop');b.textContent='■ Arrêter le worker PC';s.textContent=`Agent PC ${agentState.version} : worker démarré`;return}
     b.textContent='▶ Démarrer le worker PC';
     if(agentState.lastError||agentState.logTail){s.textContent='Dernière erreur : '+shortError(agentState.lastError||agentState.logTail)}
