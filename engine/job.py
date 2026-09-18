@@ -2,6 +2,8 @@
 import gc, tempfile, uuid
 from pathlib import Path
 from psycopg.types.json import Jsonb
+import storage_backend as media_store
+from storage_schema import ensure_storage_schema
 from .config import db, update_job, cancelled, save_asset_analysis, acquire_job_lock, release_job_lock, RENDER_WIDTH, RENDER_HEIGHT, MAX_REVISIONS, ENGINE_VERSION
 from .analysis import analyze_asset, style_fingerprint, content_profile
 from .memory import load_context
@@ -9,18 +11,24 @@ from .director import choose_plan
 from .rendering import render_plan, critic
 from .local_ai import enabled as local_ai_enabled, refine_plan, critic_video
 
+
 def _load_asset_file(work,row,index):
     aid,name,role,metadata=row
-    with db() as c:data=c.execute('select data from assets where id=%s',(aid,)).fetchone()
+    with db() as c:
+        ensure_storage_schema(c)
+        data=c.execute('select data,storage_key from assets where id=%s',(aid,)).fetchone()
     if not data:raise RuntimeError('Asset introuvable: '+str(aid))
-    ext=Path(name).suffix or '.mp4';path=work/f'a{index}{ext}';path.write_bytes(bytes(data[0]));del data;gc.collect()
+    ext=Path(name).suffix or '.mp4';path=work/f'a{index}{ext}'
+    media_store.materialize_asset(data[1],data[0],path);del data;gc.collect()
     return path
+
 
 def _rows(project_id,ids):
     with db() as c:
         sources=c.execute("select id,name,role,metadata from assets where id=any(%s) and project_id=%s and kind='source' and role in ('source','broll','talking_head')",(ids,project_id)).fetchall()
         refs=c.execute("select id,name,role,metadata from assets where project_id=%s and kind='source' and role='reference' order by created_at desc limit 5",(project_id,)).fetchall()
     return sources,refs
+
 
 def process_job(jid):
     if not acquire_job_lock(jid):return
@@ -47,7 +55,7 @@ def process_job(jid):
                 progress=7+int(12*(index+1)/max(1,len(all_rows)));update_job(jid,'running','analysis',progress,f'Analyse {index+1}/{len(all_rows)}: {name[:50]}')
             style=style_fingerprint(refs);profile=content_profile(sources);target=max(8,min(35,int(settings.get('targetDuration',18))))
             captions=bool(settings.get('captions',True));voice=settings.get('voiceover','auto');auto_revision=bool(settings.get('autoRevision',True))
-            brief={'engine':ENGINE_VERSION,'project':project[0] if project else 'Auto Director','targetDuration':target,'sourceCount':len(sources),'referenceCount':len(refs),'styleFingerprint':style,'contentProfile':profile,'performanceMemory':context.get('winningStrategies',[]),'localAI':local_ai_enabled()}
+            brief={'engine':ENGINE_VERSION,'project':project[0] if project else 'Auto Director','targetDuration':target,'sourceCount':len(sources),'referenceCount':len(refs),'styleFingerprint':style,'contentProfile':profile,'performanceMemory':context.get('winningStrategies',[]),'localAI':local_ai_enabled(),'storage':media_store.backend_name()}
             update_job(jid,'running','director',20,'V8 Director: simulation de 5 strategies',brief=brief)
             output_ids=[];scores=[];total_revisions=0;last_strategy=''
             for variant in range(max(1,min(3,int(variants)))):
@@ -69,10 +77,21 @@ def process_job(jid):
                     score2,diag2=critic(revised,target,plan2);score2,vlm_diag2=critic_video(revised,score2,plan2,work);diag2={**diag2,'localVLM':vlm_diag2,'localAIDirector':local_plan_diag2}
                     if score2>=score:
                         final,plan,score,diag=revised,plan2,score2,diag2;revision_count=1;total_revisions+=1;last_strategy=plan['strategy']
+                aid=uuid.uuid4();storage_key=None
                 meta={'engineVersion':ENGINE_VERSION,'score':score,'duration':diag.get('duration'),'strategy':plan['strategy'],'hook':plan['hook'],'pace':plan.get('pace'),'predictedRetention':plan.get('predictedRetention'),'revisionCount':revision_count,'referenceCount':len(refs),'segmentCount':len(plan['segments']),'critic':diag,'styleFingerprint':style,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'localAI':local_ai_enabled()}
-                blob=final.read_bytes();aid=uuid.uuid4()
-                with db() as c:c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata) values(%s,%s,%s,'video/mp4',%s,'render','render',%s,%s)",(aid,project_id,final.name,len(blob),blob,Jsonb(meta)))
-                del blob;gc.collect();output_ids.append(aid);scores.append(score)
+                data,storage_key,backend,checksum=media_store.persist_file(project_id,aid,'render',final.name,final,'video/mp4')
+                meta={**meta,'storageBackend':backend,'checksumSha256':checksum}
+                try:
+                    with db() as c:
+                        ensure_storage_schema(c)
+                        c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata,storage_key,storage_backend,checksum_sha256) values(%s,%s,%s,'video/mp4',%s,'render','render',%s,%s,%s,%s,%s)",(aid,project_id,final.name,final.stat().st_size,data,Jsonb(meta),storage_key,backend,checksum))
+                except Exception:
+                    if storage_key:
+                        try:media_store.delete(storage_key)
+                        except Exception:pass
+                    raise
+                if data is not None:del data
+                gc.collect();output_ids.append(aid);scores.append(score)
                 update_job(jid,'running','render',min(94,55+variant*16),f'Variante {variant+1} terminee: {score}/100',score=max(scores),revision=total_revisions,strategy=last_strategy)
             with db() as c:c.execute("update jobs set status='done',stage='complete',progress=100,message='V8 termine - galerie prete',output_asset_ids=%s,critic_score=%s,revision_count=%s,strategy=%s,updated_at=now() where id=%s",(output_ids,max(scores) if scores else 0,total_revisions,last_strategy,jid))
     except Exception as e:
