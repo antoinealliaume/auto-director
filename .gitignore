@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv-local/
+.pytest_cache/
+
+# Secrets / local worker state
+.env
+*.env
+!*.env.example
+self_hosted_worker/.env
+self_hosted_worker/.auto_profile.env
+
+# Local media / temp
+*.tmp
+*.log
+outputs/
+tmp/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
