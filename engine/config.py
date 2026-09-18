@@ -5,7 +5,7 @@ import psycopg, redis
 from imageio_ffmpeg import get_ffmpeg_exe
 from psycopg.types.json import Jsonb
 
-ENGINE_VERSION = '8.4'
+ENGINE_VERSION = '8.5'
 ANALYSIS_VERSION = 4
 DATABASE_URL = os.environ['DATABASE_URL']
 REDIS_URL = os.environ['REDIS_URL']
@@ -45,6 +45,9 @@ def ensure_schema():
         for s in stmts:
             try:c.execute(s)
             except Exception:pass
+        # Internal validation projects must never leak into the user's Studio.
+        try:c.execute("delete from projects where name in ('__SELFTEST__','__SELFTEST_V8__')")
+        except Exception:pass
 
 def update_job(jid,status,stage,progress,message,score=None,revision=None,strategy=None,brief=None):
     sets=['status=%s','stage=%s','progress=%s','message=%s','updated_at=now()']
@@ -82,9 +85,37 @@ def release_job_lock(jid):
     try:queue.delete('autodirector:lock:'+str(jid))
     except Exception:pass
 
+def _enqueue_if_missing(jid):
+    jid=str(jid)
+    try:
+        # Redis is only a delivery mechanism. PostgreSQL remains the source of truth.
+        if queue.lpos('auto_director:jobs',jid) is None:
+            queue.lpush('auto_director:jobs',jid)
+            return True
+    except Exception:
+        # Older Redis implementations may not expose LPOS. Duplicate queue entries are
+        # harmless because the per-job lock keeps processing idempotent.
+        try:queue.lpush('auto_director:jobs',jid);return True
+        except Exception:pass
+    return False
+
 def recover_stale_jobs():
+    """Rebuild the volatile Redis queue from durable PostgreSQL state.
+
+    Render's free Key Value store is intentionally non-persistent, so queued entries
+    can disappear during a Redis restart or deploy. Every worker startup repairs that
+    condition by re-enqueuing durable queued jobs and stale interrupted jobs.
+    """
+    recovered=[]
     with db() as c:
-        rows=c.execute("select id from jobs where status='running' and updated_at < now()-interval '20 minutes' limit 20").fetchall()
-        for (jid,) in rows:
+        stale=c.execute("select id from jobs where status='running' and updated_at < now()-interval '20 minutes' limit 50").fetchall()
+        for (jid,) in stale:
             c.execute("update jobs set status='queued',stage='queued',message='Reprise automatique après interruption',progress=0,updated_at=now() where id=%s",(jid,))
-            queue.lpush('auto_director:jobs',str(jid))
+            try:queue.delete('autodirector:lock:'+str(jid))
+            except Exception:pass
+            recovered.append(jid)
+        queued=c.execute("select id from jobs where status='queued' order by created_at asc limit 200").fetchall()
+    for (jid,) in queued:
+        if _enqueue_if_missing(jid):recovered.append(jid)
+    if recovered:
+        print(f'Queue recovery: {len(set(map(str,recovered)))} durable job(s) available',flush=True)
