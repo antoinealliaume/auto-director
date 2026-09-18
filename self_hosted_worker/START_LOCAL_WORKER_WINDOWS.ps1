@@ -29,10 +29,10 @@ function Import-EnvFile([string]$Path, [bool]$Overwrite=$true) {
   }
 }
 
-# Load connection settings first. The automatic profile then overrides only
-# performance-related variables so an old .env cannot accidentally overload the PC.
+# Les URLs de connexion viennent du fichier prive .env.
 Import-EnvFile $EnvFile $true
 
+# Les reglages materiels sont recalcules a chaque demarrage.
 $AutoProfileEnabled = ($env:AUTO_PROFILE -ne '0')
 if ($AutoProfileEnabled) {
   python (Join-Path $PSScriptRoot 'detect_profile.py')
@@ -71,6 +71,7 @@ $env:OLLAMA_KEEP_ALIVE='90s'
 try { [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
 
 if (-not (Test-Path '.venv-local')) {
+  Write-Host 'Creation de l environnement Python local...' -ForegroundColor Cyan
   python -m venv .venv-local
 }
 & .\.venv-local\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements.txt
@@ -121,6 +122,14 @@ if ($UseLocalAI) {
   Write-Host 'IA visuelle lourde desactivee automatiquement sur cette machine.' -ForegroundColor Yellow
 }
 
+Write-Host ''
+Write-Host 'Verification avant demarrage...' -ForegroundColor Cyan
+& .\.venv-local\Scripts\python.exe (Join-Path $PSScriptRoot 'doctor.py')
+if ($LASTEXITCODE -ne 0) {
+  throw 'Le diagnostic a detecte un probleme critique. Corrige le point ERREUR ci-dessus puis relance.'
+}
+
+Write-Host ''
 Write-Host 'Worker local lance en priorite basse. Il devient prioritaire sur Render.' -ForegroundColor Green
 Write-Host 'Si tu fermes cette fenetre, Render reprend automatiquement les jobs.' -ForegroundColor DarkGray
 & .\.venv-local\Scripts\python.exe worker.py
