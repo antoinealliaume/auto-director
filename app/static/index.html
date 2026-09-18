@@ -4,117 +4,43 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Auto Director Studio</title>
-  <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="/static/worker-status.css?v=8.6" />
-  <link rel="stylesheet" href="/static/publication.css?v=8.6" />
+  <link rel="stylesheet" href="/static/style.css?v=8.7" />
+  <link rel="stylesheet" href="/static/worker-status.css?v=8.7" />
+  <link rel="stylesheet" href="/static/publication.css?v=8.7" />
 </head>
 <body>
 <div id="toast" class="toast"></div>
 <section id="loginView" class="login-shell">
-  <div class="login-card">
-    <div class="logo">AD</div>
-    <span class="eyebrow">PRIVATE CREATOR OS</span>
-    <h1>Auto Director Studio</h1>
-    <p>Transforme tes clips Medal en vidéos courtes prêtes à publier.</p>
-    <input id="loginPassword" type="password" placeholder="Mot de passe du Studio" autocomplete="current-password" />
-    <button id="loginBtn" class="btn primary full">Entrer dans le Studio</button>
-    <div id="loginError" class="error-text"></div>
-  </div>
+  <div class="login-card"><div class="logo">AD</div><span class="eyebrow">PRIVATE CREATOR OS</span><h1>Auto Director Studio</h1><p>Transforme tes clips Medal en vidéos courtes prêtes à publier.</p><input id="loginPassword" type="password" placeholder="Mot de passe du Studio" autocomplete="current-password" /><button id="loginBtn" class="btn primary full">Entrer dans le Studio</button><div id="loginError" class="error-text"></div></div>
 </section>
-
 <div id="studio" class="layout hidden">
   <aside class="sidebar">
-    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V8.6</span></div></div>
-    <nav id="nav">
-      <button data-tab="studio" class="active">Studio</button>
-      <button data-tab="pipeline">Pipeline <span id="navJobs" class="counter">0</span></button>
-      <button data-tab="gallery">Galerie <span id="navRenders" class="counter">0</span></button>
-      <button data-tab="intelligence">Intelligence</button>
-      <button data-tab="learning">Learning</button>
-      <button data-tab="publication">Publication</button>
-    </nav>
-    <div class="sidebar-bottom">
-      <div class="service-dot"><i id="statusDot"></i><span id="serviceLabel">Connexion…</span></div>
-      <button id="logoutBtn" class="text-btn">Déconnexion</button>
-    </div>
+    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V8.7</span></div></div>
+    <nav id="nav"><button data-tab="studio" class="active">Studio</button><button data-tab="pipeline">Pipeline <span id="navJobs" class="counter">0</span></button><button data-tab="gallery">Galerie <span id="navRenders" class="counter">0</span></button><button data-tab="intelligence">Intelligence</button><button data-tab="learning">Learning</button><button data-tab="publication">Publication</button></nav>
+    <div class="sidebar-bottom"><div class="service-dot"><i id="statusDot"></i><span id="serviceLabel">Connexion…</span></div><button id="logoutBtn" class="text-btn">Déconnexion</button></div>
   </aside>
-
   <main class="main">
-    <header class="topbar">
-      <div><span class="eyebrow">AUTO DIRECTOR</span><h2 id="pageTitle">Studio de création</h2></div>
-      <button id="refreshBtn" class="btn ghost">↻ Actualiser</button>
-    </header>
-
+    <header class="topbar"><div><span class="eyebrow">AUTO DIRECTOR</span><h2 id="pageTitle">Studio de création</h2></div><button id="refreshBtn" class="btn ghost">↻ Actualiser</button></header>
     <section id="tab-studio" class="tab active">
-      <div class="hero">
-        <div><span class="eyebrow purple">WORKFLOW</span><h1>De tes rushs à une vidéo TikTok.</h1><p>Crée un projet, importe tes clips, laisse le Director choisir les moments et suis le rendu en direct.</p></div>
-        <div class="health-grid"><div><b id="statProjects">0</b><span>Projets</span></div><div><b id="statSources">0</b><span>Rushs</span></div><div><b id="statRenders">0</b><span>Rendus</span></div><div><b id="statAi">—</b><span>Moteur IA</span></div><div><b id="statWorker">—</b><span>Worker actif</span></div></div>
-      </div>
-
-      <div id="workerBanner" class="worker-banner">
-        <div class="worker-main">
-          <i id="workerStatusLed" class="worker-led"></i>
-          <div class="worker-copy"><b id="workerStatusLabel">Détection du worker…</b><span id="workerStatusDetail">Vérification du PC local et du fallback Render.</span></div>
-        </div>
-        <div class="worker-pills">
-          <span id="workerProfilePill" class="worker-pill">Profil —</span>
-          <span id="workerRenderPill" class="worker-pill">Rendu —</span>
-          <span id="workerAiPill" class="worker-pill">IA —</span>
-          <span id="workerQueuePill" class="worker-pill">File —</span>
-        </div>
-        <div class="worker-controls">
-          <button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button>
-          <span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span>
-          <a href="/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.3" download="INSTALL_AUTO_DIRECTOR_WORKER.bat" style="font-size:11px;color:#9aa4ff;text-decoration:none">Téléchargement direct</a>
-        </div>
-      </div>
-
+      <div class="hero"><div><span class="eyebrow purple">WORKFLOW</span><h1>De tes rushs à une vidéo TikTok.</h1><p>Crée un projet, importe tes clips, laisse le Director choisir les moments et suis le rendu en direct.</p></div><div class="health-grid"><div><b id="statProjects">0</b><span>Projets</span></div><div><b id="statSources">0</b><span>Rushs</span></div><div><b id="statRenders">0</b><span>Rendus</span></div><div><b id="statAi">—</b><span>Moteur IA</span></div><div><b id="statWorker">—</b><span>Worker actif</span></div></div></div>
+      <div id="workerBanner" class="worker-banner"><div class="worker-main"><i id="workerStatusLed" class="worker-led"></i><div class="worker-copy"><b id="workerStatusLabel">Détection du worker…</b><span id="workerStatusDetail">Vérification du PC local et du fallback Render.</span></div></div><div class="worker-pills"><span id="workerProfilePill" class="worker-pill">Profil —</span><span id="workerRenderPill" class="worker-pill">Rendu —</span><span id="workerAiPill" class="worker-pill">IA —</span><span id="workerQueuePill" class="worker-pill">File —</span></div><div class="worker-controls"><button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button><span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span><a href="/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.4" download="INSTALL_AUTO_DIRECTOR_WORKER.bat" style="font-size:11px;color:#9aa4ff;text-decoration:none">Téléchargement direct</a></div></div>
       <div class="step-grid">
-        <section class="card">
-          <div class="card-head"><div><span class="step">01</span><h3>Projet</h3></div><span class="muted">Organisation</span></div>
-          <div class="field"><label>Projet actif</label><select id="projectSelect"><option value="">Aucun projet</option></select></div>
-          <div class="create-row"><input id="projectName" placeholder="Ex. GMod DarkRP RiverSide" maxlength="120"/><button id="createProjectBtn" class="btn secondary">Créer</button></div>
-          <div id="projectHint" class="hint">Crée un projet pour commencer.</div>
-        </section>
-
-        <section class="card upload-card">
-          <div class="card-head"><div><span class="step">02</span><h3>Sources</h3></div><span class="muted">Medal · MP4 · MOV</span></div>
-          <div id="dropzone" class="dropzone">
-            <div class="drop-icon">⇧</div><b>Glisse tes vidéos ou un dossier ici</b><span>Les clips Medal sont reconnus automatiquement.</span>
-            <div class="drop-actions"><label class="btn ghost">Choisir des fichiers<input id="filePicker" type="file" accept="video/*,.mp4,.mov,.webm,.mkv,.avi" multiple hidden></label><label class="btn ghost">Choisir un dossier<input id="folderPicker" type="file" webkitdirectory multiple hidden></label></div>
-          </div>
-          <div id="uploadQueue" class="upload-queue"></div>
-        </section>
+        <section class="card"><div class="card-head"><div><span class="step">01</span><h3>Projet</h3></div><span class="muted">Organisation</span></div><div class="field"><label>Projet actif</label><select id="projectSelect"><option value="">Aucun projet</option></select></div><div class="create-row"><input id="projectName" placeholder="Ex. GMod DarkRP RiverSide" maxlength="120"/><button id="createProjectBtn" class="btn secondary">Créer</button></div><div id="projectHint" class="hint">Crée un projet pour commencer.</div></section>
+        <section class="card upload-card"><div class="card-head"><div><span class="step">02</span><h3>Sources</h3></div><span class="muted">Medal · MP4 · MOV</span></div><div id="dropzone" class="dropzone"><div class="drop-icon">⇧</div><b>Glisse tes vidéos ou un dossier ici</b><span>Les clips Medal sont reconnus automatiquement.</span><div class="drop-actions"><label class="btn ghost">Choisir des fichiers<input id="filePicker" type="file" accept="video/*,.mp4,.mov,.webm,.mkv,.avi" multiple hidden></label><label class="btn ghost">Choisir un dossier<input id="folderPicker" type="file" webkitdirectory multiple hidden></label></div></div><div id="uploadQueue" class="upload-queue"></div></section>
       </div>
-
-      <section class="card">
-        <div class="card-head"><div><span class="step">03</span><h3>Rushs du projet</h3></div><div class="inline-actions"><button id="selectAllBtn" class="btn tiny ghost">Tout sélectionner</button><button id="selectNoneBtn" class="btn tiny ghost">Aucun</button></div></div>
-        <div id="sourceList" class="source-list empty-state">Aucun rush dans ce projet.</div>
-      </section>
-
-      <section class="card composer">
-        <div class="card-head"><div><span class="step">04</span><h3>Director</h3></div><span class="badge online">Prêt</span></div>
-        <div class="composer-grid">
-          <div class="field"><label>Variantes</label><select id="variants"><option>1</option><option>2</option><option>3</option></select></div>
-          <div class="field"><label>Durée cible</label><select id="targetDuration"><option value="12">12 sec</option><option value="18" selected>18 sec</option><option value="24">24 sec</option><option value="30">30 sec</option></select></div>
-          <div class="field"><label>Voix off</label><select id="voiceover"><option value="auto">Auto</option><option value="on">Toujours</option><option value="off">Sans voix</option></select></div>
-          <label class="switch-field"><input id="captions" type="checkbox" checked><span></span><b>Hooks / sous-titres</b></label>
-          <label class="switch-field"><input id="autoRevision" type="checkbox" checked><span></span><b>Auto-révision</b></label>
-        </div>
-        <div class="launch-row"><div><b id="selectionSummary">0 rush sélectionné</b><span id="referenceSummary">0 référence</span></div><button id="launchBtn" class="btn primary big">▶ Lancer le bot complet</button></div>
-      </section>
+      <section class="card"><div class="card-head"><div><span class="step">03</span><h3>Rushs du projet</h3></div><div class="inline-actions"><button id="selectAllBtn" class="btn tiny ghost">Tout sélectionner</button><button id="selectNoneBtn" class="btn tiny ghost">Aucun</button></div></div><div id="sourceList" class="source-list empty-state">Aucun rush dans ce projet.</div></section>
+      <section class="card composer"><div class="card-head"><div><span class="step">04</span><h3>Director</h3></div><span class="badge online">Prêt</span></div><div class="composer-grid"><div class="field"><label>Variantes</label><select id="variants"><option>1</option><option>2</option><option>3</option></select></div><div class="field"><label>Durée cible</label><select id="targetDuration"><option value="12">12 sec</option><option value="18" selected>18 sec</option><option value="24">24 sec</option><option value="30">30 sec</option></select></div><div class="field"><label>Voix off</label><select id="voiceover"><option value="auto">Auto</option><option value="on">Toujours</option><option value="off">Sans voix</option></select></div><label class="switch-field"><input id="captions" type="checkbox" checked><span></span><b>Hooks / sous-titres</b></label><label class="switch-field"><input id="autoRevision" type="checkbox" checked><span></span><b>Auto-révision</b></label></div><div class="launch-row"><div><b id="selectionSummary">0 rush sélectionné</b><span id="referenceSummary">0 référence</span></div><button id="launchBtn" class="btn primary big">▶ Lancer le bot complet</button></div></section>
     </section>
-
     <section id="tab-pipeline" class="tab"><div class="section-title"><div><span class="eyebrow">JOBS</span><h1>Pipeline de production</h1></div></div><div id="jobList" class="job-list"></div></section>
     <section id="tab-gallery" class="tab"><div class="section-title"><div><span class="eyebrow">OUTPUTS</span><h1>Galerie finale</h1></div></div><div id="gallery" class="gallery"></div></section>
     <section id="tab-intelligence" class="tab"><div class="section-title"><div><span class="eyebrow">CONTENT INTELLIGENCE</span><h1>Ce que le bot comprend</h1></div></div><div id="intel" class="dashboard-grid"></div><div class="card"><h3>Trend Intelligence</h3><div class="trend-row"><input id="trendLabel" placeholder="Ex. hook texte ultra court"><input id="trendUrl" placeholder="Lien de référence (optionnel)"><button id="addTrendBtn" class="btn secondary">Ajouter</button></div><textarea id="trendNotes" placeholder="Ce qui fonctionne dans cette tendance…"></textarea><div id="trendList" class="trend-list"></div></div></section>
-    <section id="tab-learning" class="tab"><div class="section-title"><div><span class="eyebrow">PERFORMANCE MEMORY</span><h1>Learning</h1></div></div><div id="learningStats" class="health-grid wide"></div><div class="card"><h3>Ajouter les performances d'un rendu</h3><div class="feedback-grid"><select id="feedbackAsset"></select><input id="fViews" type="number" min="0" placeholder="Vues"><input id="fLikes" type="number" min="0" placeholder="Likes"><input id="fShares" type="number" min="0" placeholder="Partages"><input id="fCompletion" type="number" min="0" max="1" step="0.01" placeholder="Completion 0–1"><input id="fConversions" type="number" min="0" placeholder="Conversions"><button id="saveFeedbackBtn" class="btn primary">Enregistrer</button></div></div></section>
+    <section id="tab-learning" class="tab"><div class="section-title"><div><span class="eyebrow">PERFORMANCE MEMORY</span><h1>Learning</h1></div></div><div id="learningStats" class="health-grid wide"></div><div class="card"><h3>Mettre à jour les performances d'un rendu</h3><div class="feedback-grid"><select id="feedbackAsset"></select><input id="fViews" type="number" min="0" placeholder="Vues"><input id="fLikes" type="number" min="0" placeholder="Likes"><input id="fShares" type="number" min="0" placeholder="Partages"><input id="fCompletion" type="number" min="0" max="1" step="0.01" placeholder="Completion 0–1"><input id="fConversions" type="number" min="0" placeholder="Conversions"><button id="saveFeedbackBtn" class="btn primary">Enregistrer</button></div></div></section>
     <section id="tab-publication" class="tab"><div class="section-title"><div><span class="eyebrow">PUBLISHING</span><h1>Centre de publication</h1></div></div></section>
   </main>
 </div>
-<script src="/static/app.js"></script>
-<script src="/static/secure-media.js?v=8.6"></script>
-<script src="/static/worker-status.js?v=2.3"></script>
-<script src="/static/publication.js?v=8.6"></script>
+<script src="/static/app.js?v=8.7"></script>
+<script src="/static/secure-media.js?v=8.7"></script>
+<script src="/static/worker-status.js?v=2.4"></script>
+<script src="/static/publication.js?v=8.7"></script>
 </body>
 </html>
