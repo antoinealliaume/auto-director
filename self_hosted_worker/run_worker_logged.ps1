@@ -26,12 +26,20 @@ try {
     throw "Launcher introuvable: $Launcher"
   }
 
-  & $Launcher *>&1 | ForEach-Object {
-    Write-Log ([string]$_)
+  # Run the real launcher in a child PowerShell process. Native stderr is merged
+  # before it reaches this process, so Windows PowerShell cannot promote a harmless
+  # native stderr line into a terminating NativeCommandError.
+  $previousPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Launcher 2>&1 | ForEach-Object {
+      Write-Log ([string]$_)
+    }
+    $code = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 1 }
+  } finally {
+    $ErrorActionPreference = $previousPreference
   }
 
-  $code = 0
-  if ($null -ne $LASTEXITCODE) { $code = [int]$LASTEXITCODE }
   Write-Log ("Worker launcher exit code: $code")
   exit $code
 } catch {
