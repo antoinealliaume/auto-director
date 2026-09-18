@@ -63,7 +63,11 @@
   async function pollWorker(){
     const label=byId('workerStatusLabel'),detail=byId('workerStatusDetail'),led=byId('workerStatusLed'),stat=byId('statWorker'),profile=byId('workerProfilePill'),render=byId('workerRenderPill'),ai=byId('workerAiPill'),statAi=byId('statAi'),queue=byId('workerQueuePill');if(!label||!detail||!led)return;
     try{
-      const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),5000);const r=await fetch(STATUS_URL,{cache:'no-store',signal:controller.signal,credentials:'same-origin'});clearTimeout(timer);if(!r.ok)throw new Error(`status ${r.status}`);const h=await r.json();markStudioOnline();const info=h.worker||{},kind=h.activeWorker;
+      const session=localStorage.getItem('ad_token')||'';
+      if(!session)throw new Error('missing session');
+      const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),5000);
+      const r=await fetch(STATUS_URL,{cache:'no-store',signal:controller.signal,credentials:'same-origin',headers:{'Authorization':'Bearer '+session}});
+      clearTimeout(timer);if(!r.ok)throw new Error(`status ${r.status}`);const h=await r.json();markStudioOnline();const info=h.worker||{},kind=h.activeWorker;
       if(!h.ok||!kind){paintOffline(h.queueDepth>0?`Aucun worker actif pour le moment · ${h.queueDepth} job(s) conservé(s).`:'Aucun worker actif pour le moment.');if(statAi)statAi.textContent='V8.6';return}
       const local=kind==='local';led.className='worker-led '+(local?'local':'cloud');label.textContent=local?'PC local prioritaire':'Render en secours';if(stat)stat.textContent=local?'Local':'Cloud';
       if(local){const localAI=!!info.localAI;detail.textContent=localAI?'Ton PC traite les jobs via HTTPS avec l’IA locale prudente.':'Ton PC traite les jobs via HTTPS avec le Director V8.6 léger.';if(profile)profile.textContent='Profil '+safe(info.profile||'safe');if(render)render.textContent=renderLabel(info);if(ai)ai.textContent=localAI?`IA ${safe(info.model)}`:'IA lourde désactivée';if(statAi)statAi.textContent=localAI?'Local AI':'V8.6 local'}
