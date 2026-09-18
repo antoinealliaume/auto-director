@@ -3,7 +3,61 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 Write-Host '=== Auto Director PC Worker - HTTPS sécurisé ===' -ForegroundColor Cyan
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw 'Python 3.12+ est requis.' }
+
+function Test-RealPython([string]$Path) {
+  if (-not $Path -or -not (Test-Path $Path)) { return $false }
+  $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+  try {
+    & $Path -c "import sys; raise SystemExit(0 if sys.version_info >= (3,10) else 2)" 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  } catch { return $false }
+  finally { $ErrorActionPreference=$old }
+}
+
+function Resolve-RealPython {
+  $candidates = New-Object System.Collections.Generic.List[string]
+  if ($env:AUTO_DIRECTOR_PYTHON) { $candidates.Add($env:AUTO_DIRECTOR_PYTHON) }
+  foreach($p in @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python313\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python312\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python311\python.exe')
+  )) { if($p){$candidates.Add($p)} }
+  try {
+    Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Python') -Directory -ErrorAction SilentlyContinue |
+      Sort-Object Name -Descending | ForEach-Object {
+        $p=Join-Path $_.FullName 'python.exe'; if(Test-Path $p){$candidates.Add($p)}
+      }
+  } catch {}
+  try {
+    $cmd=Get-Command python.exe -ErrorAction SilentlyContinue
+    if($cmd -and $cmd.Source -and $cmd.Source -notmatch '\\WindowsApps\\'){ $candidates.Add($cmd.Source) }
+  } catch {}
+  foreach($p in $candidates){ if(Test-RealPython $p){ return $p } }
+
+  # Windows py launcher is trustworthy only if it resolves to a real interpreter.
+  $py=Get-Command py.exe -ErrorAction SilentlyContinue
+  if($py){
+    foreach($selector in @('-3.13','-3.12','-3.11','-3')){
+      $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+      try {
+        $resolved=& $py.Source $selector -c "import sys; print(sys.executable)" 2>$null
+        if($LASTEXITCODE -eq 0 -and $resolved){
+          $path=([string]($resolved | Select-Object -Last 1)).Trim()
+          if(Test-RealPython $path){ return $path }
+        }
+      } catch {} finally {$ErrorActionPreference=$old}
+    }
+  }
+  return $null
+}
+
+$PythonExe = Resolve-RealPython
+if(-not $PythonExe){ throw 'Python réel introuvable. Réinstalle le worker PC : l installateur ajoutera Python 3.12 automatiquement.' }
+$env:AUTO_DIRECTOR_PYTHON=$PythonExe
+Write-Host "Python: $PythonExe" -ForegroundColor DarkGray
 
 $EnvFile = Join-Path $PSScriptRoot '.env'
 if (-not (Test-Path $EnvFile)) {
@@ -45,7 +99,13 @@ if (-not $env:WORKER_TOKEN) {
 $env:STUDIO_URL=$StudioUrl;$env:REMOTE_WORKER_MODE='1';$env:WORKER_KIND='local';$env:PYTHONUNBUFFERED='1'
 
 $AutoProfileEnabled=($env:AUTO_PROFILE -ne '0')
-if($AutoProfileEnabled){python (Join-Path $PSScriptRoot 'detect_profile.py');Import-EnvFile (Join-Path $PSScriptRoot '.auto_profile.env') $true}
+if($AutoProfileEnabled){
+  $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+  try { & $PythonExe (Join-Path $PSScriptRoot 'detect_profile.py') 2>&1 | Out-Host; $profileCode=$LASTEXITCODE }
+  finally { $ErrorActionPreference=$old }
+  if($profileCode -ne 0){Write-Host 'Profil matériel auto indisponible: utilisation du profil sûr.' -ForegroundColor Yellow}
+  Import-EnvFile (Join-Path $PSScriptRoot '.auto_profile.env') $true
+}
 if(-not $env:PROFILE_NAME){$env:PROFILE_NAME='safe-unknown'}
 if(-not $env:RENDER_WIDTH){$env:RENDER_WIDTH='720'};if(-not $env:RENDER_HEIGHT){$env:RENDER_HEIGHT='1280'};if(-not $env:RENDER_FPS){$env:RENDER_FPS='24'}
 if(-not $env:FFMPEG_THREADS){$env:FFMPEG_THREADS='2'};if(-not $env:MOMENT_SAMPLES){$env:MOMENT_SAMPLES='5'};if(-not $env:MAX_REVISIONS){$env:MAX_REVISIONS='0'}
@@ -61,7 +121,12 @@ Write-Host "Charge limitée: FFmpeg=$env:FFMPEG_THREADS threads | analyse=$env:M
 Write-Host ("Transcription locale: " + $(if($env:LOCAL_TRANSCRIBE -eq '1'){"$env:LOCAL_WHISPER_MODEL / $env:LOCAL_WHISPER_THREADS thread(s)"}else{'désactivée sur ce profil'})) -ForegroundColor Green
 Write-Host 'Transport: HTTPS uniquement · aucun secret PostgreSQL/Redis sur le PC' -ForegroundColor Green
 
-if(-not (Test-Path '.venv-local')){Write-Host 'Création de l environnement Python local...' -ForegroundColor Cyan;python -m venv .venv-local}
+if(-not (Test-Path '.venv-local')){
+  Write-Host 'Création de l environnement Python local...' -ForegroundColor Cyan
+  $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+  try { & $PythonExe -m venv .venv-local 2>&1 | Out-Host; $venvCode=$LASTEXITCODE } finally {$ErrorActionPreference=$old}
+  if($venvCode -ne 0){throw 'Création de l environnement Python impossible.'}
+}
 & .\.venv-local\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements.txt
 if($LASTEXITCODE -ne 0){throw 'Installation Python du worker impossible.'}
 if($env:LOCAL_TRANSCRIBE -eq '1'){
