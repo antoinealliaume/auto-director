@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Auto Director application package bootstrap.
 
-Project-local FastAPI subclass used to attach cross-cutting production features
+Project-local FastAPI subclass used to attach production security and worker routes
 before app.main constructs the Studio application.
 """
 import fastapi as _fastapi
 from .worker_status import attach as _attach_worker_status
-from .local_worker_api import attach as _attach_local_worker_api
+from .local_worker_api2 import attach as _attach_local_worker_api
 from .security import attach as _attach_security
 
 _BaseFastAPI = _fastapi.FastAPI
