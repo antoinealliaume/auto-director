@@ -7,6 +7,7 @@ from .analysis import analyze_asset, style_fingerprint, content_profile
 from .memory import load_context
 from .director import choose_plan
 from .rendering import render_plan, critic
+from .local_ai import enabled as local_ai_enabled, refine_plan, critic_video
 
 def _load_asset_file(work,row,index):
     aid,name,role,metadata=row
@@ -46,23 +47,29 @@ def process_job(jid):
                 progress=7+int(12*(index+1)/max(1,len(all_rows)));update_job(jid,'running','analysis',progress,f'Analyse {index+1}/{len(all_rows)}: {name[:50]}')
             style=style_fingerprint(refs);profile=content_profile(sources);target=max(8,min(35,int(settings.get('targetDuration',18))))
             captions=bool(settings.get('captions',True));voice=settings.get('voiceover','auto');auto_revision=bool(settings.get('autoRevision',True))
-            brief={'engine':ENGINE_VERSION,'project':project[0] if project else 'Auto Director','targetDuration':target,'sourceCount':len(sources),'referenceCount':len(refs),'styleFingerprint':style,'contentProfile':profile,'performanceMemory':context.get('winningStrategies',[])}
+            brief={'engine':ENGINE_VERSION,'project':project[0] if project else 'Auto Director','targetDuration':target,'sourceCount':len(sources),'referenceCount':len(refs),'styleFingerprint':style,'contentProfile':profile,'performanceMemory':context.get('winningStrategies',[]),'localAI':local_ai_enabled()}
             update_job(jid,'running','director',20,'V8 Director: simulation de 5 strategies',brief=brief)
             output_ids=[];scores=[];total_revisions=0;last_strategy=''
             for variant in range(max(1,min(3,int(variants)))):
                 if cancelled(jid):return
                 plan,simulations=choose_plan(brief['project'],sources,style,profile,context,target,variant,0)
-                last_strategy=plan['strategy'];brief_v={**brief,'selectedStrategy':plan['strategy'],'simulations':simulations,'predictedRetention':plan.get('predictedRetention')}
-                update_job(jid,'running','director',23+variant*20,f"V8 Director V{variant+1}: {plan['strategy']} ({plan.get('predictedRetention',0)}/100)",strategy=last_strategy,brief=brief_v)
+                plan,local_plan_diag=refine_plan(brief['project'],plan,sources,paths,work)
+                last_strategy=plan['strategy'];brief_v={**brief,'selectedStrategy':plan['strategy'],'simulations':simulations,'predictedRetention':plan.get('predictedRetention'),'localAIDirector':local_plan_diag}
+                director_label='VLM local + V8' if local_ai_enabled() else 'V8 local'
+                update_job(jid,'running','director',23+variant*20,f"{director_label} V{variant+1}: {plan['strategy']} ({plan.get('predictedRetention',0)}/100)",strategy=last_strategy,brief=brief_v)
                 initial=work/f'AutoDirector_V8_{variant+1}.mp4';render_plan(work,plan,paths,initial,captions,voice)
-                score,diag=critic(initial,target,plan);final=initial;revision_count=0
+                score,diag=critic(initial,target,plan)
+                score,vlm_diag=critic_video(initial,score,plan,work);diag={**diag,'localVLM':vlm_diag}
+                final=initial;revision_count=0
                 if auto_revision and score<82 and MAX_REVISIONS>0:
                     update_job(jid,'running','revision',min(88,42+variant*18),f'V8 Critic: revision automatique, score {score}/100')
                     plan2,_=choose_plan(brief['project'],sources,style,profile,context,target,variant,1)
-                    revised=work/f'AutoDirector_V8_{variant+1}_R1.mp4';render_plan(work,plan2,paths,revised,captions,voice);score2,diag2=critic(revised,target,plan2)
+                    plan2,local_plan_diag2=refine_plan(brief['project'],plan2,sources,paths,work)
+                    revised=work/f'AutoDirector_V8_{variant+1}_R1.mp4';render_plan(work,plan2,paths,revised,captions,voice)
+                    score2,diag2=critic(revised,target,plan2);score2,vlm_diag2=critic_video(revised,score2,plan2,work);diag2={**diag2,'localVLM':vlm_diag2,'localAIDirector':local_plan_diag2}
                     if score2>=score:
                         final,plan,score,diag=revised,plan2,score2,diag2;revision_count=1;total_revisions+=1;last_strategy=plan['strategy']
-                meta={'engineVersion':ENGINE_VERSION,'score':score,'duration':diag.get('duration'),'strategy':plan['strategy'],'hook':plan['hook'],'pace':plan.get('pace'),'predictedRetention':plan.get('predictedRetention'),'revisionCount':revision_count,'referenceCount':len(refs),'segmentCount':len(plan['segments']),'critic':diag,'styleFingerprint':style,'resolution':[RENDER_WIDTH,RENDER_HEIGHT]}
+                meta={'engineVersion':ENGINE_VERSION,'score':score,'duration':diag.get('duration'),'strategy':plan['strategy'],'hook':plan['hook'],'pace':plan.get('pace'),'predictedRetention':plan.get('predictedRetention'),'revisionCount':revision_count,'referenceCount':len(refs),'segmentCount':len(plan['segments']),'critic':diag,'styleFingerprint':style,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'localAI':local_ai_enabled()}
                 blob=final.read_bytes();aid=uuid.uuid4()
                 with db() as c:c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata) values(%s,%s,%s,'video/mp4',%s,'render','render',%s,%s)",(aid,project_id,final.name,len(blob),blob,Jsonb(meta)))
                 del blob;gc.collect();output_ids.append(aid);scores.append(score)
