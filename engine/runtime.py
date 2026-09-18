@@ -3,11 +3,15 @@ import json, os, tempfile, threading, time, uuid
 from http.server import BaseHTTPRequestHandler,HTTPServer
 from pathlib import Path
 from psycopg.types.json import Jsonb
-from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,OPENAI_API_KEY,SELF_TEST,ensure_schema,recover_stale_jobs
+from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,OPENAI_API_KEY,SELF_TEST,ensure_schema,recover_stale_jobs,FFMPEG_THREADS
 from .job import process_job
 
 WORKER_KIND=os.environ.get('WORKER_KIND','cloud').strip().lower()
 LOCAL_HEARTBEAT_KEY='autodirector:worker:local:heartbeat'
+PROFILE_NAME=os.environ.get('PROFILE_NAME','cloud-safe' if WORKER_KIND!='local' else 'safe-unknown')
+LOCAL_VLM_URL=os.environ.get('LOCAL_VLM_URL','').strip()
+LOCAL_VLM_MODEL=os.environ.get('LOCAL_VLM_MODEL','qwen2.5vl:3b').strip()
+RENDER_FPS=max(24,min(30,int(os.environ.get('RENDER_FPS','30'))))
 
 
 def self_test():
@@ -37,17 +41,57 @@ def self_test():
             except Exception:pass
 
 
+def heartbeat_payload():
+    return {
+        'kind':'local',
+        'engine':ENGINE_VERSION,
+        'profile':PROFILE_NAME,
+        'resolution':[RENDER_WIDTH,RENDER_HEIGHT],
+        'fps':RENDER_FPS,
+        'ffmpegThreads':FFMPEG_THREADS,
+        'localAI':bool(LOCAL_VLM_URL),
+        'model':LOCAL_VLM_MODEL if LOCAL_VLM_URL else None,
+        'updatedAt':int(time.time()),
+    }
+
+
 def local_heartbeat():
-    payload=json.dumps({'kind':'local','engine':ENGINE_VERSION,'resolution':[RENDER_WIDTH,RENDER_HEIGHT]})
     while True:
-        try:queue.set(LOCAL_HEARTBEAT_KEY,payload,ex=18)
+        try:queue.set(LOCAL_HEARTBEAT_KEY,json.dumps(heartbeat_payload()),ex=18)
         except Exception:pass
         time.sleep(5)
 
 
+def read_local_heartbeat():
+    try:
+        raw=queue.get(LOCAL_HEARTBEAT_KEY)
+        if not raw:return None
+        value=json.loads(raw)
+        return value if isinstance(value,dict) else None
+    except Exception:return None
+
+
 class Health(BaseHTTPRequestHandler):
+    def _headers(self,status,length):
+        self.send_response(status)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(length))
+        self.send_header('Cache-Control','no-store')
+        self.send_header('Access-Control-Allow-Origin','*')
+        self.send_header('Access-Control-Allow-Methods','GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers','Content-Type')
+        self.end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin','*')
+        self.send_header('Access-Control-Allow-Methods','GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers','Content-Type')
+        self.end_headers()
+
     def do_GET(self):
-        if self.path!='/health':self.send_response(404);self.end_headers();return
+        if self.path!='/health':
+            body=b'{"detail":"not found"}';self._headers(404,len(body));self.wfile.write(body);return
         db_ok=q_ok=ff_ok=False
         try:
             with db() as c:c.execute('select 1');db_ok=True
@@ -56,10 +100,28 @@ class Health(BaseHTTPRequestHandler):
         except Exception:pass
         try:ff_ok=run([FFMPEG,'-version'],15,False).returncode==0
         except Exception:pass
-        try:local_online=bool(queue.exists(LOCAL_HEARTBEAT_KEY))
-        except Exception:local_online=False
-        body=json.dumps({'ok':db_ok and q_ok and ff_ok,'worker':'ready','workerKind':WORKER_KIND,'localWorkerOnline':local_online,'engine':ENGINE_VERSION,'database':db_ok,'queue':q_ok,'ffmpeg':ff_ok,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'ai':'openai' if OPENAI_API_KEY else 'local-v8','capabilities':['moment-ranker','style-fingerprint','multi-plan-director','performance-memory','retention-critic','auto-revision','job-recovery','local-worker-priority']}).encode()
-        self.send_response(200 if db_ok and q_ok and ff_ok else 503);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+        local_info=read_local_heartbeat()
+        try:queue_depth=int(queue.llen('auto_director:jobs'))
+        except Exception:queue_depth=None
+        body=json.dumps({
+            'ok':db_ok and q_ok and ff_ok,
+            'worker':'ready',
+            'workerKind':WORKER_KIND,
+            'activeWorker':'local' if local_info else 'cloud',
+            'localWorkerOnline':bool(local_info),
+            'localWorker':local_info,
+            'engine':ENGINE_VERSION,
+            'database':db_ok,
+            'queue':q_ok,
+            'queueDepth':queue_depth,
+            'ffmpeg':ff_ok,
+            'resolution':[RENDER_WIDTH,RENDER_HEIGHT],
+            'fps':RENDER_FPS,
+            'ffmpegThreads':FFMPEG_THREADS,
+            'ai':'openai' if OPENAI_API_KEY else ('local-vlm' if LOCAL_VLM_URL else 'local-v8'),
+            'capabilities':['moment-ranker','style-fingerprint','multi-plan-director','performance-memory','retention-critic','auto-revision','job-recovery','local-worker-priority','adaptive-safe-mode']
+        }).encode()
+        self._headers(200 if db_ok and q_ok and ff_ok else 503,len(body));self.wfile.write(body)
     def log_message(self,*args):pass
 
 
@@ -71,7 +133,6 @@ def next_job():
     if WORKER_KIND=='local':
         item=queue.brpop('auto_director:jobs',timeout=5)
         return item[1] if item else None
-    # Cloud worker is a safety net. If a local worker is alive, do not steal its jobs.
     try:
         if queue.exists(LOCAL_HEARTBEAT_KEY):
             time.sleep(8);return None
@@ -84,7 +145,7 @@ def next_job():
 def main():
     ensure_schema();recover_stale_jobs();threading.Thread(target=health_server,daemon=True).start()
     if WORKER_KIND=='local':threading.Thread(target=local_heartbeat,daemon=True).start()
-    print(f'Auto Director V{ENGINE_VERSION} ready {RENDER_WIDTH}x{RENDER_HEIGHT} kind={WORKER_KIND} ai={bool(OPENAI_API_KEY)}',flush=True)
+    print(f'Auto Director V{ENGINE_VERSION} ready {RENDER_WIDTH}x{RENDER_HEIGHT}@{RENDER_FPS} kind={WORKER_KIND} profile={PROFILE_NAME} localAI={bool(LOCAL_VLM_URL)}',flush=True)
     if SELF_TEST:self_test()
     while True:
         try:
