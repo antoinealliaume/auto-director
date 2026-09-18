@@ -5,7 +5,7 @@ import psycopg, redis
 from imageio_ffmpeg import get_ffmpeg_exe
 from psycopg.types.json import Jsonb
 
-ENGINE_VERSION = '8.2'
+ENGINE_VERSION = '8.3'
 ANALYSIS_VERSION = 4
 DATABASE_URL = os.environ['DATABASE_URL']
 REDIS_URL = os.environ['REDIS_URL']
@@ -13,6 +13,7 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY','')
 AI_MODEL = os.environ.get('AI_MODEL','gpt-5.6-luna')
 RENDER_WIDTH = int(os.environ.get('RENDER_WIDTH','720'))
 RENDER_HEIGHT = int(os.environ.get('RENDER_HEIGHT','1280'))
+FFMPEG_THREADS = max(1,min(6,int(os.environ.get('FFMPEG_THREADS','2'))))
 MAX_REVISIONS = max(0,min(2,int(os.environ.get('MAX_REVISIONS','1'))))
 MOMENT_SAMPLES = max(4,min(10,int(os.environ.get('MOMENT_SAMPLES','7'))))
 SELF_TEST = os.environ.get('SELF_TEST_ON_START','0') == '1'
