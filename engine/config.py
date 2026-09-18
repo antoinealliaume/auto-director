@@ -10,7 +10,7 @@ from psycopg.types.json import Jsonb
 
 from storage_schema import ensure_storage_schema
 
-ENGINE_VERSION = '8.7'
+ENGINE_VERSION = '9.0'
 ANALYSIS_VERSION = 4
 REMOTE_WORKER_MODE = os.environ.get('REMOTE_WORKER_MODE','0') == '1'
 DATABASE_URL = os.environ.get('DATABASE_URL','')
@@ -55,16 +55,14 @@ def ensure_schema():
         "create index if not exists idx_worker_leases_expiry on worker_leases(lease_expires)",
     ]
     with db() as c:
-        for s in stmts:
-            c.execute(s)
+        for s in stmts:c.execute(s)
         ensure_storage_schema(c)
-        c.execute("delete from projects where name in ('__SELFTEST__','__SELFTEST_V8__')")
+        c.execute("delete from projects where name in ('__SELFTEST__','__SELFTEST_V8__','__SELFTEST_V9__')")
 
 
 def update_job(jid,status,stage,progress,message,score=None,revision=None,strategy=None,brief=None):
     if REMOTE_WORKER_MODE:return
-    sets=['status=%s','stage=%s','progress=%s','message=%s','updated_at=now()']
-    vals=[status,stage,int(progress),str(message)[:500]]
+    sets=['status=%s','stage=%s','progress=%s','message=%s','updated_at=now()'];vals=[status,stage,int(progress),str(message)[:500]]
     if score is not None:sets.append('critic_score=%s');vals.append(float(score))
     if revision is not None:sets.append('revision_count=%s');vals.append(int(revision))
     if strategy is not None:sets.append('strategy=%s');vals.append(str(strategy)[:120])
@@ -77,18 +75,14 @@ def update_job(jid,status,stage,progress,message,score=None,revision=None,strate
 
 def cancelled(jid):
     if REMOTE_WORKER_MODE:return False
-    with db() as c:
-        row=c.execute('select status from jobs where id=%s',(jid,)).fetchone()
+    with db() as c:row=c.execute('select status from jobs where id=%s',(jid,)).fetchone()
     return bool(row and row[0]=='cancelled')
 
 
 def save_asset_analysis(asset_id,metadata,analysis):
     if REMOTE_WORKER_MODE:return
-    meta=dict(metadata or {})
-    meta['directorAnalysis']={k:v for k,v in analysis.items() if k not in {'id','name','role'}}
-    meta['engineVersion']=ENGINE_VERSION
-    with db() as c:
-        c.execute('update assets set metadata=%s where id=%s',(Jsonb(meta),uuid.UUID(str(asset_id))))
+    meta=dict(metadata or {});meta['directorAnalysis']={k:v for k,v in analysis.items() if k not in {'id','name','role'}};meta['engineVersion']=ENGINE_VERSION
+    with db() as c:c.execute('update assets set metadata=%s where id=%s',(Jsonb(meta),uuid.UUID(str(asset_id))))
 
 
 def acquire_job_lock(jid,ttl=3600):
@@ -106,8 +100,7 @@ def _enqueue_if_missing(jid):
     if queue is None:return False
     jid=str(jid)
     try:
-        if queue.lpos(QUEUE_KEY,jid) is None:
-            queue.lpush(QUEUE_KEY,jid);return True
+        if queue.lpos(QUEUE_KEY,jid) is None:queue.lpush(QUEUE_KEY,jid);return True
     except Exception:
         try:queue.lpush(QUEUE_KEY,jid);return True
         except Exception:pass
