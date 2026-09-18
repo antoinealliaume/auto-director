@@ -66,38 +66,38 @@ def nvidia_info():
 
 
 def choose_profile(ram, cpu, gpu):
-    """Choose a safe profile. Never auto-select above a 3B VLM or 720p."""
+    """Choose a conservative profile. Never auto-select above a 3B VLM or 720p."""
     cpu = max(1, int(cpu or 1))
     vram = float(gpu.get('vram_gb') or 0.0)
 
-    # Unknown RAM is treated as a weak machine, never as a powerful one.
     if ram <= 0 or ram < 8 or cpu <= 4:
         name = 'safe-minimal'
         local_ai = False
         ff_threads = 1 if cpu <= 2 else 2
         samples = 4
         revisions = 0
+        fps = 24
     elif ram < 12:
         name = 'safe-light'
         local_ai = False
         ff_threads = min(2, max(1, cpu // 2))
         samples = 5
         revisions = 0
+        fps = 24
     elif vram >= 6 and ram >= 12 and cpu >= 6:
-        # Local vision is enabled only with an actual NVIDIA GPU margin.
         name = 'safe-local-ai'
         local_ai = True
         ff_threads = min(3, max(2, cpu // 3))
         samples = 5
         revisions = 1
+        fps = 30
     else:
-        # Plenty of RAM without a known GPU: keep the strong heuristic engine,
-        # but do not make a 3B model compete with the user's CPU.
         name = 'safe-balanced'
         local_ai = False
         ff_threads = min(3, max(2, cpu // 3))
         samples = 6
         revisions = 1
+        fps = 30
 
     ai_threads = min(3, max(1, cpu // 4))
     return {
@@ -114,7 +114,7 @@ def choose_profile(ram, cpu, gpu):
         'LOCAL_VLM_THREADS': str(ai_threads),
         'RENDER_WIDTH': '720',
         'RENDER_HEIGHT': '1280',
-        'RENDER_FPS': '30',
+        'RENDER_FPS': str(fps),
         'FFMPEG_THREADS': str(ff_threads),
         'MOMENT_SAMPLES': str(samples),
         'MAX_REVISIONS': str(revisions),
