@@ -29,11 +29,9 @@ function Import-EnvFile([string]$Path, [bool]$Overwrite=$true) {
   }
 }
 
-# Detecte le materiel avec uniquement la bibliotheque standard Python.
 python (Join-Path $PSScriptRoot 'detect_profile.py')
 $AutoProfile = Join-Path $PSScriptRoot '.auto_profile.env'
 Import-EnvFile $AutoProfile $true
-# Les choix explicites de .env restent prioritaires sur le profil automatique.
 Import-EnvFile $EnvFile $true
 
 if ($env:DATABASE_URL -like '*USER:PASSWORD*' -or $env:REDIS_URL -like '*PASSWORD*') {
@@ -43,7 +41,7 @@ if ($env:DATABASE_URL -like '*USER:PASSWORD*' -or $env:REDIS_URL -like '*PASSWOR
 Write-Host "Profil: $env:PROFILE_NAME" -ForegroundColor Green
 Write-Host "Rendu: $env:RENDER_WIDTH x $env:RENDER_HEIGHT | FFmpeg threads: $env:FFMPEG_THREADS | samples: $env:MOMENT_SAMPLES" -ForegroundColor Green
 
-# Limites globales prudentes pour ne pas monopoliser le PC.
+$env:WORKER_KIND='local'
 $env:PYTHONUNBUFFERED='1'
 $env:OMP_NUM_THREADS=$env:FFMPEG_THREADS
 $env:MKL_NUM_THREADS=$env:FFMPEG_THREADS
@@ -52,6 +50,8 @@ $env:OLLAMA_NUM_PARALLEL='1'
 $env:OLLAMA_MAX_LOADED_MODELS='1'
 $env:OLLAMA_MAX_QUEUE='2'
 $env:OLLAMA_KEEP_ALIVE='2m'
+
+try { [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
 
 if (-not (Test-Path '.venv-local')) {
   python -m venv .venv-local
@@ -96,6 +96,6 @@ if ($UseLocalAI) {
   Write-Host 'Profil leger: IA visuelle lourde desactivee automatiquement.' -ForegroundColor Yellow
 }
 
-Write-Host 'Worker local lance. Il utilise au maximum un job a la fois.' -ForegroundColor Green
-Write-Host 'Tu peux laisser cette fenetre ouverte ou la minimiser.' -ForegroundColor DarkGray
+Write-Host 'Worker local lance. Il devient prioritaire sur Render tant que cette fenetre reste ouverte.' -ForegroundColor Green
+Write-Host 'Si tu fermes le worker, Render reprend automatiquement en secours.' -ForegroundColor DarkGray
 & .\.venv-local\Scripts\python.exe worker.py
