@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$AgentVersion = '2.5'
+$AgentVersion = '2.6'
 $AllowedOrigin = 'https://auto-director-web.onrender.com'
 $Port = 8765
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
@@ -19,7 +19,7 @@ function Worker-IsRunning { if(-not $script:WorkerPid){return $false};try{Get-Pr
 function Json-Response([bool]$ok,[hashtable]$extra=@{}) { $running=Worker-IsRunning;$body=@{ok=$ok;agent=$true;agentVersion=$AgentVersion;workerRunning=$running;workerPid=$script:WorkerPid;lastExitCode=$script:LastExitCode;lastStartError=$script:LastStartError;logTail=(Get-LogTail)};foreach($k in $extra.Keys){$body[$k]=$extra[$k]};return ($body|ConvertTo-Json -Compress -Depth 6) }
 function Write-Response($stream,[int]$status,[string]$body,[string]$origin) { $statusText=switch($status){200{'OK'}204{'No Content'}400{'Bad Request'}401{'Unauthorized'}403{'Forbidden'}404{'Not Found'}409{'Conflict'}500{'Internal Server Error'}default{'OK'}};$payload=[Text.Encoding]::UTF8.GetBytes($body);$headers="HTTP/1.1 $status $statusText`r`nContent-Type: application/json; charset=utf-8`r`nContent-Length: $($payload.Length)`r`nCache-Control: no-store`r`nConnection: close`r`n";if($origin -eq $AllowedOrigin){$headers+="Access-Control-Allow-Origin: $AllowedOrigin`r`nVary: Origin`r`nAccess-Control-Allow-Methods: GET, POST, OPTIONS`r`nAccess-Control-Allow-Headers: Content-Type`r`nAccess-Control-Allow-Private-Network: true`r`n"};$headers+="`r`n";$hb=[Text.Encoding]::ASCII.GetBytes($headers);$stream.Write($hb,0,$hb.Length);if($payload.Length -gt 0){$stream.Write($payload,0,$payload.Length)};$stream.Flush() }
 function Stop-Worker { if(Worker-IsRunning){try{& taskkill.exe /PID $script:WorkerPid /T /F|Out-Null}catch{}};$script:WorkerPid=$null }
-function Send-StartingHeartbeat([string]$studioUrl,[string]$workerToken) { try{$headers=@{Authorization="Bearer $workerToken"};$hb=@{engine='9.0';profile='starting';resolution=@(720,1280);fps=24;ffmpegThreads=1;localAI=$false}|ConvertTo-Json -Compress;Invoke-RestMethod -Method Post -Uri ($studioUrl.TrimEnd('/')+'/api/local-worker/heartbeat') -Headers $headers -ContentType 'application/json' -Body $hb -TimeoutSec 12|Out-Null}catch{} }
+function Send-StartingHeartbeat([string]$studioUrl,[string]$workerToken) { try{$headers=@{Authorization="Bearer $workerToken"};$hb=@{engine='9.1';profile='starting';resolution=@(720,1280);fps=24;ffmpegThreads=1;localAI=$false}|ConvertTo-Json -Compress;Invoke-RestMethod -Method Post -Uri ($studioUrl.TrimEnd('/')+'/api/local-worker/heartbeat') -Headers $headers -ContentType 'application/json' -Body $hb -TimeoutSec 12|Out-Null}catch{} }
 function Start-Worker([string]$studioUrl,[string]$studioToken) {
   if(Worker-IsRunning){return @{alreadyRunning=$true;pid=$script:WorkerPid}};$script:LastStartError='';$script:LastExitCode=$null
   if(-not(Test-Path $Launcher)){throw 'Worker local non installé. Réinstalle Auto Director Local Agent.'};if(-not(Test-Path $Runner)){throw 'Runner local manquant. Mets à jour Auto Director Local Agent.'}
