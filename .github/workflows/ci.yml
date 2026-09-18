@@ -1,0 +1,29 @@
+name: Auto Director CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Compile Python source
+        run: python -m compileall -q app engine self_hosted_worker worker.py
+      - name: Run core tests
+        env:
+          DATABASE_URL: postgresql://unused:unused@127.0.0.1:5432/unused
+          REDIS_URL: redis://127.0.0.1:6379/0
+        run: python -m unittest discover -s tests -v
