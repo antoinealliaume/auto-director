@@ -1,47 +1,37 @@
 $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
-$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.0'
+$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.1'
 $TempZip = Join-Path $env:TEMP 'auto-director-main.zip'
 $TempExtract = Join-Path $env:TEMP ('auto-director-install-' + [guid]::NewGuid().ToString('N'))
-$ExpectedAgentVersion = [version]'2.0'
+$ExpectedAgentVersion = [version]'2.1'
 $AgentStatusUrl = 'http://127.0.0.1:8765/status'
 $AgentStopUrl = 'http://127.0.0.1:8765/stop'
 
 function Stop-PreviousAutoDirector {
   Write-Host 'Arrêt de l ancien agent/worker...' -ForegroundColor Cyan
+  try { Invoke-RestMethod -Method Post -Uri $AgentStopUrl -ContentType 'application/json' -Body '{}' -TimeoutSec 3 | Out-Null } catch {}
   try {
-    Invoke-RestMethod -Method Post -Uri $AgentStopUrl -ContentType 'application/json' -Body '{}' -TimeoutSec 3 | Out-Null
+    $agents = Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match 'local_agent\.ps1' }
+    foreach ($p in $agents) { try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {} }
   } catch {}
-
-  try {
-    $agents = Get-CimInstance Win32_Process | Where-Object {
-      $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match 'local_agent\.ps1'
-    }
-    foreach ($p in $agents) {
-      try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {}
-    }
-  } catch {}
-
-  Start-Sleep -Milliseconds 800
+  Start-Sleep -Milliseconds 900
 }
 
-function Wait-ForAgentV2 {
-  $deadline = [DateTime]::UtcNow.AddSeconds(15)
+function Wait-ForAgent {
+  $deadline = [DateTime]::UtcNow.AddSeconds(18)
   $lastVersion = $null
   while ([DateTime]::UtcNow -lt $deadline) {
     try {
       $status = Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2
       if ($status.agentVersion) {
         $lastVersion = [string]$status.agentVersion
-        try {
-          if ([version]$lastVersion -ge $ExpectedAgentVersion) { return $status }
-        } catch {}
+        try { if ([version]$lastVersion -ge $ExpectedAgentVersion) { return $status } } catch {}
       }
     } catch {}
     Start-Sleep -Milliseconds 650
   }
-  if ($lastVersion) { throw "Ancien agent encore actif (version $lastVersion). Redémarre Windows puis relance cet installateur." }
+  if ($lastVersion) { throw "Ancien agent encore actif (version $lastVersion). Ferme les anciens installateurs puis relance celui-ci." }
   throw 'Le nouvel agent Auto Director ne répond pas sur le port local 8765.'
 }
 
@@ -53,9 +43,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
   if (Get-Command winget -ErrorAction SilentlyContinue) {
     winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
     $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
-  } else {
-    throw 'Python 3.12 est requis et winget n est pas disponible sur ce PC.'
-  }
+  } else { throw 'Python 3.12 est requis et winget n est pas disponible sur ce PC.' }
 }
 
 Stop-PreviousAutoDirector
@@ -85,13 +73,13 @@ Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
 
 Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
 Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$Agent) -WindowStyle Hidden
-$status = Wait-ForAgentV2
+$status = Wait-ForAgent
 
 try { Remove-Item $TempZip -Force -ErrorAction SilentlyContinue } catch {}
 try { Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue } catch {}
 
 Write-Host ''
 Write-Host ("Installation terminée. Agent PC version " + $status.agentVersion + " actif.") -ForegroundColor Green
-Write-Host 'Retourne dans Auto Director : le bouton doit maintenant afficher « Démarrer le worker PC ».' -ForegroundColor Green
-Write-Host 'Le petit agent démarrera automatiquement avec Windows, mais le rendu lourd reste arrêté tant que tu ne le lances pas.' -ForegroundColor DarkGray
+Write-Host 'Retourne dans Auto Director puis clique sur « Démarrer le worker PC ».' -ForegroundColor Green
+Write-Host 'En cas de problème, le Studio peut maintenant lire le journal local du démarrage.' -ForegroundColor DarkGray
 Start-Sleep -Seconds 4
