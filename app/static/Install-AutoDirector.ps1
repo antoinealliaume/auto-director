@@ -1,10 +1,10 @@
 $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
-$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.1'
+$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.2'
 $TempZip = Join-Path $env:TEMP 'auto-director-main.zip'
 $TempExtract = Join-Path $env:TEMP ('auto-director-install-' + [guid]::NewGuid().ToString('N'))
-$ExpectedAgentVersion = [version]'2.1'
+$ExpectedAgentVersion = [version]'2.2'
 $AgentStatusUrl = 'http://127.0.0.1:8765/status'
 $AgentStopUrl = 'http://127.0.0.1:8765/stop'
 
@@ -31,7 +31,7 @@ function Wait-ForAgent {
     } catch {}
     Start-Sleep -Milliseconds 650
   }
-  if ($lastVersion) { throw "Ancien agent encore actif (version $lastVersion). Ferme les anciens installateurs puis relance celui-ci." }
+  if ($lastVersion) { throw "Ancien agent encore actif (version $lastVersion). Redémarre Windows puis relance cet installateur." }
   throw 'Le nouvel agent Auto Director ne répond pas sur le port local 8765.'
 }
 
@@ -47,7 +47,6 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 }
 
 Stop-PreviousAutoDirector
-
 Write-Host 'Téléchargement de la dernière version...' -ForegroundColor Cyan
 Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing -Headers @{ 'Cache-Control'='no-cache' }
 if (Test-Path $TempExtract) { Remove-Item $TempExtract -Recurse -Force }
@@ -64,7 +63,9 @@ if (Test-Path $RepoRoot) {
 Move-Item $Source $RepoRoot
 
 $Agent = Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1'
+$Runner = Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
 if (-not (Test-Path $Agent)) { throw 'Agent local introuvable dans le package.' }
+if (-not (Test-Path $Runner)) { throw 'Runner worker introuvable dans le package.' }
 
 $StartupDir = [Environment]::GetFolderPath('Startup')
 $StartupCmd = Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd'
@@ -80,6 +81,6 @@ try { Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue } c
 
 Write-Host ''
 Write-Host ("Installation terminée. Agent PC version " + $status.agentVersion + " actif.") -ForegroundColor Green
-Write-Host 'Retourne dans Auto Director puis clique sur « Démarrer le worker PC ».' -ForegroundColor Green
-Write-Host 'En cas de problème, le Studio peut maintenant lire le journal local du démarrage.' -ForegroundColor DarkGray
+Write-Host 'Retourne dans Auto Director puis clique sur Démarrer le worker PC.' -ForegroundColor Green
+Write-Host 'Le journal de diagnostic est maintenant écrit en UTF-8 et lisible dans le Studio.' -ForegroundColor DarkGray
 Start-Sleep -Seconds 4
