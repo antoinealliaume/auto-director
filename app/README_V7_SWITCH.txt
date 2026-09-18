@@ -1,0 +1,1 @@
+The production backend entrypoint is app/main.py. Temporary staging files can be removed after successful cutover.
