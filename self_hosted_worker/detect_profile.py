@@ -2,7 +2,6 @@
 import ctypes
 import json
 import os
-import platform
 import shutil
 import subprocess
 from pathlib import Path
@@ -46,7 +45,9 @@ def nvidia_info():
     try:
         p = subprocess.run(
             [exe, '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
-            capture_output=True, text=True, timeout=8
+            capture_output=True,
+            text=True,
+            timeout=8,
         )
         best = {'name': '', 'vram_gb': 0.0}
         for line in (p.stdout or '').splitlines():
@@ -65,75 +66,84 @@ def nvidia_info():
 
 
 def choose_profile(ram, cpu, gpu):
-    vram = gpu['vram_gb']
-    # Always conservative. We never auto-select a model larger than 3B.
-    if ram and ram < 8:
-        name = 'minimal'
+    """Choose a safe profile. Never auto-select above a 3B VLM or 720p."""
+    cpu = max(1, int(cpu or 1))
+    vram = float(gpu.get('vram_gb') or 0.0)
+
+    # Unknown RAM is treated as a weak machine, never as a powerful one.
+    if ram <= 0 or ram < 8 or cpu <= 4:
+        name = 'safe-minimal'
         local_ai = False
-        ff_threads = 2
+        ff_threads = 1 if cpu <= 2 else 2
         samples = 4
         revisions = 0
-    elif (ram and ram < 12) and vram < 6:
-        name = 'light'
+    elif ram < 12:
+        name = 'safe-light'
         local_ai = False
-        ff_threads = min(3, max(1, cpu - 1))
+        ff_threads = min(2, max(1, cpu // 2))
         samples = 5
-        revisions = 1
-    elif vram >= 6 or ram >= 16:
-        name = 'balanced-local-ai'
+        revisions = 0
+    elif vram >= 6 and ram >= 12 and cpu >= 6:
+        # Local vision is enabled only with an actual NVIDIA GPU margin.
+        name = 'safe-local-ai'
         local_ai = True
-        ff_threads = min(4, max(2, cpu // 2 if cpu else 2))
-        samples = 6
+        ff_threads = min(3, max(2, cpu // 3))
+        samples = 5
         revisions = 1
     else:
-        name = 'light'
+        # Plenty of RAM without a known GPU: keep the strong heuristic engine,
+        # but do not make a 3B model compete with the user's CPU.
+        name = 'safe-balanced'
         local_ai = False
-        ff_threads = min(3, max(1, cpu - 1))
-        samples = 5
+        ff_threads = min(3, max(2, cpu // 3))
+        samples = 6
         revisions = 1
 
+    ai_threads = min(3, max(1, cpu // 4))
     return {
         'PROFILE_NAME': name,
         'LOCAL_AI_AUTO_ENABLED': '1' if local_ai else '0',
         'LOCAL_VLM_MODEL': 'qwen2.5vl:3b',
         'LOCAL_VLM_URL': 'http://127.0.0.1:11434' if local_ai else '',
-        'LOCAL_VLM_TIMEOUT': '180',
-        'LOCAL_VLM_IMAGE_WIDTH': '512',
-        'LOCAL_VLM_MAX_IMAGES': '4',
-        'LOCAL_VLM_NUM_CTX': '1536',
-        'LOCAL_VLM_NUM_PREDICT': '260',
-        'LOCAL_VLM_MIN_FREE_GB': '2.2',
-        'LOCAL_VLM_THREADS': str(min(4, max(2, cpu // 2 if cpu else 2))),
+        'LOCAL_VLM_TIMEOUT': '150',
+        'LOCAL_VLM_IMAGE_WIDTH': '448',
+        'LOCAL_VLM_MAX_IMAGES': '3',
+        'LOCAL_VLM_NUM_CTX': '1280',
+        'LOCAL_VLM_NUM_PREDICT': '200',
+        'LOCAL_VLM_MIN_FREE_GB': '3.0',
+        'LOCAL_VLM_THREADS': str(ai_threads),
         'RENDER_WIDTH': '720',
         'RENDER_HEIGHT': '1280',
+        'RENDER_FPS': '30',
         'FFMPEG_THREADS': str(ff_threads),
         'MOMENT_SAMPLES': str(samples),
         'MAX_REVISIONS': str(revisions),
-        'SELF_TEST_ON_START': '0',
         'WORKER_CONCURRENCY': '1',
+        'SELF_TEST_ON_START': '0',
         'OLLAMA_NUM_PARALLEL': '1',
         'OLLAMA_MAX_LOADED_MODELS': '1',
-        'OLLAMA_KEEP_ALIVE': '2m',
+        'OLLAMA_MAX_QUEUE': '1',
+        'OLLAMA_KEEP_ALIVE': '90s',
     }
 
 
 def main():
     ram = total_ram_gb()
-    cpu = os.cpu_count() or 2
+    cpu = os.cpu_count() or 1
     gpu = nvidia_info()
     profile = choose_profile(ram, cpu, gpu)
-    lines = [f'{k}={v}' for k, v in profile.items()]
-    OUT.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    OUT.write_text('\n'.join(f'{k}={v}' for k, v in profile.items()) + '\n', encoding='utf-8')
     report = {
         'profile': profile['PROFILE_NAME'],
-        'ramGb': ram,
+        'ramGb': ram if ram > 0 else 'inconnue',
         'cpuThreads': cpu,
         'gpu': gpu['name'] or 'non detecte',
         'vramGb': gpu['vram_gb'],
         'localAI': profile['LOCAL_AI_AUTO_ENABLED'] == '1',
-        'model': profile['LOCAL_VLM_MODEL'] if profile['LOCAL_AI_AUTO_ENABLED'] == '1' else 'V8 heuristique uniquement',
-        'render': f"{profile['RENDER_WIDTH']}x{profile['RENDER_HEIGHT']}",
+        'model': profile['LOCAL_VLM_MODEL'] if profile['LOCAL_AI_AUTO_ENABLED'] == '1' else 'V8 heuristique',
+        'render': f"{profile['RENDER_WIDTH']}x{profile['RENDER_HEIGHT']}@{profile['RENDER_FPS']}",
         'ffmpegThreads': int(profile['FFMPEG_THREADS']),
+        'revisions': int(profile['MAX_REVISIONS']),
     }
     print(json.dumps(report, ensure_ascii=False))
 
