@@ -1,7 +1,7 @@
 (()=>{
   const STATUS_URL='/api/worker-status';
   const LOCAL_AGENT_URL='http://127.0.0.1:8765';
-  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=8.6';
+  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.0.1';
   const byId=id=>document.getElementById(id);
   const safe=v=>v==null?'—':String(v);
   let agentState={online:false,workerRunning:false,busy:false,version:'',needsUpdate:false};
