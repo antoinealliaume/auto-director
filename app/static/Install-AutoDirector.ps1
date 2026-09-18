@@ -1,11 +1,51 @@
 $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
-$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip'
+$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.0'
 $TempZip = Join-Path $env:TEMP 'auto-director-main.zip'
 $TempExtract = Join-Path $env:TEMP ('auto-director-install-' + [guid]::NewGuid().ToString('N'))
+$ExpectedAgentVersion = [version]'2.0'
+$AgentStatusUrl = 'http://127.0.0.1:8765/status'
+$AgentStopUrl = 'http://127.0.0.1:8765/stop'
 
-Write-Host '=== Auto Director - installation du worker PC ===' -ForegroundColor Cyan
+function Stop-PreviousAutoDirector {
+  Write-Host 'Arrêt de l ancien agent/worker...' -ForegroundColor Cyan
+  try {
+    Invoke-RestMethod -Method Post -Uri $AgentStopUrl -ContentType 'application/json' -Body '{}' -TimeoutSec 3 | Out-Null
+  } catch {}
+
+  try {
+    $agents = Get-CimInstance Win32_Process | Where-Object {
+      $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match 'local_agent\.ps1'
+    }
+    foreach ($p in $agents) {
+      try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {}
+    }
+  } catch {}
+
+  Start-Sleep -Milliseconds 800
+}
+
+function Wait-ForAgentV2 {
+  $deadline = [DateTime]::UtcNow.AddSeconds(15)
+  $lastVersion = $null
+  while ([DateTime]::UtcNow -lt $deadline) {
+    try {
+      $status = Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2
+      if ($status.agentVersion) {
+        $lastVersion = [string]$status.agentVersion
+        try {
+          if ([version]$lastVersion -ge $ExpectedAgentVersion) { return $status }
+        } catch {}
+      }
+    } catch {}
+    Start-Sleep -Milliseconds 650
+  }
+  if ($lastVersion) { throw "Ancien agent encore actif (version $lastVersion). Redémarre Windows puis relance cet installateur." }
+  throw 'Le nouvel agent Auto Director ne répond pas sur le port local 8765.'
+}
+
+Write-Host '=== Auto Director - installation / mise a jour du worker PC ===' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -18,8 +58,10 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
   }
 }
 
+Stop-PreviousAutoDirector
+
 Write-Host 'Téléchargement de la dernière version...' -ForegroundColor Cyan
-Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing
+Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing -Headers @{ 'Cache-Control'='no-cache' }
 if (Test-Path $TempExtract) { Remove-Item $TempExtract -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $TempExtract | Out-Null
 Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
@@ -41,14 +83,15 @@ $StartupCmd = Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd'
 $cmd = "@echo off`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"`r`n"
 Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
 
-# Lance l'agent immédiatement. S'il existe déjà, la nouvelle instance quitte sans erreur.
+Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
 Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$Agent) -WindowStyle Hidden
+$status = Wait-ForAgentV2
 
 try { Remove-Item $TempZip -Force -ErrorAction SilentlyContinue } catch {}
 try { Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue } catch {}
 
 Write-Host ''
-Write-Host 'Installation terminée.' -ForegroundColor Green
-Write-Host 'Retourne dans Auto Director puis clique sur « Démarrer le worker PC ».' -ForegroundColor Green
+Write-Host ("Installation terminée. Agent PC version " + $status.agentVersion + " actif.") -ForegroundColor Green
+Write-Host 'Retourne dans Auto Director : le bouton doit maintenant afficher « Démarrer le worker PC ».' -ForegroundColor Green
 Write-Host 'Le petit agent démarrera automatiquement avec Windows, mais le rendu lourd reste arrêté tant que tu ne le lances pas.' -ForegroundColor DarkGray
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 4
