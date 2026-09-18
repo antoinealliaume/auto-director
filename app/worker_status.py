@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Same-origin worker status for the Studio UI.
-
-The browser must never depend on a direct cross-origin request to the Render worker.
-Workers advertise short-lived heartbeats in Redis; this endpoint turns those signals
-into a small public, non-secret health payload for the Studio.
-"""
+"""Authenticated same-origin worker status for the private Studio UI."""
 import json
 import os
+from typing import Optional
 
 import redis
+from fastapi import Header, HTTPException
 from fastapi.responses import JSONResponse
 
 REDIS_URL = os.environ.get('REDIS_URL','')
@@ -27,45 +24,27 @@ def _read(q,key):
         if not raw:return None
         value=json.loads(raw)
         return value if isinstance(value,dict) else None
-    except Exception:
-        return None
+    except Exception:return None
 
 
 def worker_status_payload():
     try:
-        q=_redis()
-        q.ping()
-        local=_read(q,LOCAL_KEY)
-        cloud=_read(q,CLOUD_KEY)
+        q=_redis();q.ping();local=_read(q,LOCAL_KEY);cloud=_read(q,CLOUD_KEY)
         try:depth=int(q.llen(QUEUE_KEY))
         except Exception:depth=None
-        active=local or cloud
-        active_kind='local' if local else ('cloud' if cloud else None)
-        return {
-            'ok':bool(active),
-            'activeWorker':active_kind,
-            'worker':active,
-            'localWorkerOnline':bool(local),
-            'cloudWorkerOnline':bool(cloud),
-            'localWorker':local,
-            'cloudWorker':cloud,
-            'queueDepth':depth,
-        }
-    except Exception as exc:
-        return {
-            'ok':False,
-            'activeWorker':None,
-            'worker':None,
-            'localWorkerOnline':False,
-            'cloudWorkerOnline':False,
-            'localWorker':None,
-            'cloudWorker':None,
-            'queueDepth':None,
-            'error':'queue-unavailable',
-        }
+        active=local or cloud;kind='local' if local else ('cloud' if cloud else None)
+        return {'ok':bool(active),'activeWorker':kind,'worker':active,'localWorkerOnline':bool(local),'cloudWorkerOnline':bool(cloud),'localWorker':local,'cloudWorker':cloud,'queueDepth':depth}
+    except Exception:
+        return {'ok':False,'activeWorker':None,'worker':None,'localWorkerOnline':False,'cloudWorkerOnline':False,'localWorker':None,'cloudWorker':None,'queueDepth':None,'error':'queue-unavailable'}
 
 
 def attach(app):
-    async def endpoint():
+    async def endpoint(authorization:Optional[str]=Header(None)):
+        token=authorization[7:] if authorization and authorization.startswith('Bearer ') else ''
+        try:
+            from .main import verify_token
+            valid=bool(token and verify_token(token))
+        except Exception:valid=False
+        if not valid:raise HTTPException(401,'Session Studio requise')
         return JSONResponse(worker_status_payload(),headers={'Cache-Control':'no-store, max-age=0'})
     app.add_api_route('/api/worker-status',endpoint,methods=['GET'],include_in_schema=False)
