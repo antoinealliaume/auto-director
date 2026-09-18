@@ -6,6 +6,10 @@ from psycopg.types.json import Jsonb
 from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,OPENAI_API_KEY,SELF_TEST,ensure_schema,recover_stale_jobs
 from .job import process_job
 
+WORKER_KIND=os.environ.get('WORKER_KIND','cloud').strip().lower()
+LOCAL_HEARTBEAT_KEY='autodirector:worker:local:heartbeat'
+
+
 def self_test():
     pid=aid=jid=None
     try:
@@ -32,6 +36,15 @@ def self_test():
                 with db() as c:c.execute('delete from projects where id=%s',(pid,))
             except Exception:pass
 
+
+def local_heartbeat():
+    payload=json.dumps({'kind':'local','engine':ENGINE_VERSION,'resolution':[RENDER_WIDTH,RENDER_HEIGHT]})
+    while True:
+        try:queue.set(LOCAL_HEARTBEAT_KEY,payload,ex=18)
+        except Exception:pass
+        time.sleep(5)
+
+
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path!='/health':self.send_response(404);self.end_headers();return
@@ -43,20 +56,39 @@ class Health(BaseHTTPRequestHandler):
         except Exception:pass
         try:ff_ok=run([FFMPEG,'-version'],15,False).returncode==0
         except Exception:pass
-        body=json.dumps({'ok':db_ok and q_ok and ff_ok,'worker':'ready','engine':ENGINE_VERSION,'database':db_ok,'queue':q_ok,'ffmpeg':ff_ok,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'ai':'openai' if OPENAI_API_KEY else 'local-v8','capabilities':['moment-ranker','style-fingerprint','multi-plan-director','performance-memory','retention-critic','auto-revision','job-recovery']}).encode()
+        try:local_online=bool(queue.exists(LOCAL_HEARTBEAT_KEY))
+        except Exception:local_online=False
+        body=json.dumps({'ok':db_ok and q_ok and ff_ok,'worker':'ready','workerKind':WORKER_KIND,'localWorkerOnline':local_online,'engine':ENGINE_VERSION,'database':db_ok,'queue':q_ok,'ffmpeg':ff_ok,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'ai':'openai' if OPENAI_API_KEY else 'local-v8','capabilities':['moment-ranker','style-fingerprint','multi-plan-director','performance-memory','retention-critic','auto-revision','job-recovery','local-worker-priority']}).encode()
         self.send_response(200 if db_ok and q_ok and ff_ok else 503);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def log_message(self,*args):pass
+
 
 def health_server():
     HTTPServer(('0.0.0.0',int(os.environ.get('PORT','10000'))),Health).serve_forever()
 
+
+def next_job():
+    if WORKER_KIND=='local':
+        item=queue.brpop('auto_director:jobs',timeout=5)
+        return item[1] if item else None
+    # Cloud worker is a safety net. If a local worker is alive, do not steal its jobs.
+    try:
+        if queue.exists(LOCAL_HEARTBEAT_KEY):
+            time.sleep(8);return None
+    except Exception:pass
+    item=queue.rpop('auto_director:jobs')
+    if not item:time.sleep(5)
+    return item
+
+
 def main():
     ensure_schema();recover_stale_jobs();threading.Thread(target=health_server,daemon=True).start()
-    print(f'Auto Director V{ENGINE_VERSION} ready {RENDER_WIDTH}x{RENDER_HEIGHT} ai={bool(OPENAI_API_KEY)}',flush=True)
+    if WORKER_KIND=='local':threading.Thread(target=local_heartbeat,daemon=True).start()
+    print(f'Auto Director V{ENGINE_VERSION} ready {RENDER_WIDTH}x{RENDER_HEIGHT} kind={WORKER_KIND} ai={bool(OPENAI_API_KEY)}',flush=True)
     if SELF_TEST:self_test()
     while True:
         try:
-            item=queue.brpop('auto_director:jobs',timeout=5)
-            if item:process_job(item[1])
+            jid=next_job()
+            if jid:process_job(jid)
         except Exception as e:
             print('V8 worker loop error',repr(e),flush=True);time.sleep(2)
