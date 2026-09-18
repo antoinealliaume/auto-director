@@ -5,6 +5,15 @@ import statistics
 from .memory import strategy_prior, preferred_pace
 
 STRATEGIES=('tease_payoff','escalation','speedrun','contrast','clean_story')
+MODE_STRATEGIES={
+    'auto':STRATEGIES,
+    'story':('clean_story','escalation','tease_payoff'),
+    'funny':('contrast','tease_payoff','escalation'),
+    'highlight':('tease_payoff','speedrun','escalation'),
+    'fast':('speedrun','contrast','tease_payoff'),
+    'clean':('clean_story','contrast'),
+}
+INTENSITY_MULTIPLIER={'soft':1.18,'balanced':1.0,'aggressive':.72}
 
 
 def _moments(sources):
@@ -23,15 +32,16 @@ def _moments(sources):
     return out
 
 
-def _duration(style,profile,strategy,revision=0):
+def _duration(style,profile,strategy,revision=0,intensity='balanced'):
     pace=float(style.get('pace',2.0))
     if strategy=='speedrun':pace*=.68
     elif strategy=='tease_payoff':pace*=.86
     elif strategy=='clean_story':pace*=1.22
     elif strategy=='contrast':pace*=.95
+    pace*=INTENSITY_MULTIPLIER.get(intensity,1.0)
     if profile.get('tempo')=='chaotic':pace*=.86
     if revision:pace*=.82
-    return max(.85,min(3.4,pace))
+    return max(.72,min(3.8,pace))
 
 
 def _order(pool,strategy,variant):
@@ -62,16 +72,24 @@ def _dedupe(seq):
     return out
 
 
-def _hook(project,strategy,variant):
+def _hook(project,strategy,variant,hook_style='auto'):
     name=(project or 'ce moment')[:45]
-    options={
-      'tease_payoff':[f'La fin sur {name} est impossible à prédire.','Attends les 3 dernières secondes.'],
-      'escalation':['Ça devient de pire en pire à chaque seconde.','Je pensais que ça allait se calmer.'],
-      'speedrun':['Regarde tout ce qui se passe en quelques secondes.','Tu vas rater un détail si tu clignes des yeux.'],
-      'contrast':['Le début ne prépare absolument pas à la suite.','Deux ambiances totalement opposées en quelques secondes.'],
-      'clean_story':['Voici exactement comment la situation a dégénéré.','Tout part d’un détail presque invisible.'],
-    }
-    arr=options.get(strategy,options['tease_payoff']);return arr[variant%len(arr)]
+    if hook_style=='curiosity':
+        options=[f'Tu vois le détail qui change tout sur {name} ?','Regarde bien ce qui se passe juste après.']
+    elif hook_style=='payoff':
+        options=['Attends la fin, le meilleur arrive après.','Les dernières secondes changent complètement la scène.']
+    elif hook_style=='direct':
+        options=[f'Voilà exactement ce qui s’est passé sur {name}.','Le moment fort commence maintenant.']
+    else:
+        by_strategy={
+          'tease_payoff':[f'La fin sur {name} est impossible à prédire.','Attends les 3 dernières secondes.'],
+          'escalation':['Ça devient de pire en pire à chaque seconde.','Je pensais que ça allait se calmer.'],
+          'speedrun':['Regarde tout ce qui se passe en quelques secondes.','Tu vas rater un détail si tu clignes des yeux.'],
+          'contrast':['Le début ne prépare absolument pas à la suite.','Deux ambiances totalement opposées en quelques secondes.'],
+          'clean_story':['Voici exactement comment la situation a dégénéré.','Tout part d’un détail presque invisible.'],
+        }
+        options=by_strategy.get(strategy,by_strategy['tease_payoff'])
+    return options[variant%len(options)]
 
 
 def _segment(m,duration,zoom,caption=''):
@@ -82,9 +100,9 @@ def _segment(m,duration,zoom,caption=''):
     }
 
 
-def make_plan(project,sources,style,profile,context,target,strategy,variant=0,revision=0):
-    pool=_dedupe(_order(_moments(sources),strategy,variant));pace=_duration(style,profile,strategy,revision)
-    target=max(8,min(35,int(target)));needed=max(3,min(16,math.ceil(target/pace)))
+def make_plan(project,sources,style,profile,context,target,strategy,variant=0,revision=0,intensity='balanced',hook_style='auto'):
+    pool=_dedupe(_order(_moments(sources),strategy,variant));pace=_duration(style,profile,strategy,revision,intensity)
+    target=max(8,min(35,int(target)));needed=max(3,min(18,math.ceil(target/pace)))
     segs=[];used_asset_counts={};elapsed=0.0
     for i,m in enumerate(pool*3):
         if len(segs)>=needed or elapsed>=target-.3:break
@@ -95,22 +113,25 @@ def make_plan(project,sources,style,profile,context,target,strategy,variant=0,re
         if available<.65:continue
         duration=min(pace,max(.65,remaining),available)
         if duration<.65:continue
-        zoom=1.015+min(.065,.018*((i+variant)%4));caption=''
+        zoom_base=.012 if intensity=='soft' else .018 if intensity=='balanced' else .025
+        zoom=1.012+min(.08,zoom_base*((i+variant)%4));caption=''
         if not segs:caption='Ne quitte pas maintenant'
         elif strategy=='escalation' and len(segs) in (2,4):caption='Ça empire…'
+        elif strategy=='contrast' and len(segs)==2:caption='Et là, tout change.'
         segs.append(_segment(m,duration,zoom,caption));used_asset_counts[m['assetId']]=count+1;elapsed+=duration
     if strategy=='tease_payoff' and len(segs)>=3 and pool:
         best=max(pool,key=lambda x:x['quality']);best_key=(best['assetId'],round(best['start'],1))
-        # Keep the strongest moment for the payoff instead of spoiling it earlier.
         for idx,s in enumerate(segs[:-1]):
             if (s['assetId'],round(float(s['start']),1))==best_key:
-                alt=next((m for m in pool if (m['assetId'],round(m['start'],1))!=best_key and m['sourceDuration']-m['start']>.7),None)
-                if alt:
-                    segs[idx]=_segment(alt,min(float(s['duration']),max(.7,alt['sourceDuration']-alt['start']-.05)),float(s['zoom']),s.get('caption',''))
+                alt=next((m for m in pool if (m['assetId'],round(m['start'],1))!=best_key and (m['sourceDuration']<=0 or m['sourceDuration']-m['start']>.7)),None)
+                if alt:segs[idx]=_segment(alt,min(float(s['duration']),max(.7,(alt['sourceDuration']-alt['start']-.05) if alt['sourceDuration']>0 else float(s['duration']))),float(s['zoom']),s.get('caption',''))
                 break
         last_duration=float(segs[-1]['duration']);available=(best['sourceDuration']-best['start']-.05) if best['sourceDuration']>0 else last_duration
         segs[-1]=_segment(best,min(last_duration,max(.65,available)),float(segs[-1]['zoom']),'Voilà le moment')
-    return {'hook':_hook(project,strategy,variant),'strategy':strategy,'segments':segs,'pace':round(pace,2),'source':'director-v8'}
+    return {
+        'hook':_hook(project,strategy,variant,hook_style),'strategy':strategy,'segments':segs,'pace':round(pace,2),
+        'source':'director-v9','intensity':intensity,'hookStyle':hook_style,
+    }
 
 
 def predict(plan,style,context,target):
@@ -128,13 +149,14 @@ def predict(plan,style,context,target):
     return round(score,1),breakdown
 
 
-def choose_plan(project,sources,style,profile,context,target,variant=0,revision=0):
+def choose_plan(project,sources,style,profile,context,target,variant=0,revision=0,mode='auto',intensity='balanced',hook_style='auto'):
     learned=preferred_pace(context);effective=dict(style)
     if learned:effective['pace']=round(.7*float(style.get('pace',2))+.3*learned,2)
+    allowed=MODE_STRATEGIES.get(mode,STRATEGIES)
     candidates=[]
-    for strategy in STRATEGIES:
-        plan=make_plan(project,sources,effective,profile,context,target,strategy,variant,revision)
-        score,why=predict(plan,effective,context,target);plan['predictedRetention']=score;plan['prediction']=why;candidates.append(plan)
+    for strategy in allowed:
+        plan=make_plan(project,sources,effective,profile,context,target,strategy,variant,revision,intensity,hook_style)
+        score,why=predict(plan,effective,context,target);plan['predictedRetention']=score;plan['prediction']=why;plan['directorMode']=mode;candidates.append(plan)
     candidates.sort(key=lambda x:x['predictedRetention'],reverse=True)
     pick=min(max(0,int(variant)),len(candidates)-1);winner=candidates[pick]
     return winner,[{'strategy':x['strategy'],'score':x['predictedRetention']} for x in candidates]
