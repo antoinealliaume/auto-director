@@ -25,15 +25,12 @@ class V9JobIn(BaseModel):
 
 
 def attach(app):
-    # Keep the runtime metadata coherent without duplicating the full legacy API.
     try:
         from . import main as main_module
-        main_module.APP_VERSION='9.0';main_module.ENGINE_VERSION='9.0';app.version='9.0'
+        main_module.APP_VERSION='9.1';main_module.ENGINE_VERSION='9.1';app.version='9.1'
     except Exception:
         pass
 
-    # Replace only the legacy POST /api/jobs route. Existing callers keep the
-    # same URL while V9 settings stop being silently discarded.
     app.router.routes[:]=[
         route for route in app.router.routes
         if not (getattr(route,'path',None)=='/api/jobs' and 'POST' in (getattr(route,'methods',set()) or set()))
@@ -44,10 +41,11 @@ def attach(app):
         from .main import require_auth
         require_auth(authorization)
         return {
-            'version':'9.0','engine':'director-v9',
+            'version':'9.1','engine':'director-v9.1-quality',
             'directorModes':sorted(DIRECTOR_MODES),
             'editIntensities':sorted(EDIT_INTENSITIES),
             'hookStyles':sorted(HOOK_STYLES),
+            'qualityEngine':True,
         }
 
     def _create(x:V9JobIn,authorization:Optional[str]):
@@ -70,14 +68,14 @@ def attach(app):
                 'assetIds':[str(a) for a in ids],
                 'captions':bool(x.captions),'voiceover':voice,'autoRevision':bool(x.autoRevision),
                 'targetDuration':max(8,min(35,int(x.targetDuration))),
-                'directorMode':mode,'editIntensity':intensity,'hookStyle':hook,'studioVersion':'9.0',
+                'directorMode':mode,'editIntensity':intensity,'hookStyle':hook,'studioVersion':'9.1',
             }
-            c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,%s,%s,%s)",(jid,pid,'V9 accepté · en attente du worker',max(1,min(3,int(x.variants))),Jsonb(settings)))
-            c.execute("insert into job_events(job_id,stage,message) values(%s,'queued',%s)",(jid,f'Job V9 créé · mode {mode} · intensité {intensity}'))
+            c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,%s,%s,%s)",(jid,pid,'V9.1 Quality accepté · en attente du worker',max(1,min(3,int(x.variants))),Jsonb(settings)))
+            c.execute("insert into job_events(job_id,stage,message) values(%s,'queued',%s)",(jid,f'Job V9.1 créé · mode {mode} · intensité {intensity}'))
         signalled=False
         try:queue.lpush(QUEUE_KEY,str(jid));signalled=True
         except Exception:pass
-        return {'id':str(jid),'status':'queued','version':'9.0','directorMode':mode,'queueSignalled':signalled}
+        return {'id':str(jid),'status':'queued','version':'9.1','directorMode':mode,'queueSignalled':signalled}
 
     @app.post('/api/jobs',include_in_schema=False)
     def create_job(x:V9JobIn,authorization:Optional[str]=Header(None)):
