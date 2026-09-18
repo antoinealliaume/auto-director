@@ -7,7 +7,7 @@ echo   AUTO DIRECTOR - INSTALLATION / MISE A JOUR
 echo ==============================================
 echo.
 set "PS1=%TEMP%\Install-AutoDirector.ps1"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache'} 'https://auto-director-web.onrender.com/static/Install-AutoDirector.ps1?v=2.3' -OutFile '%PS1%'"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache'} 'https://auto-director-web.onrender.com/static/Install-AutoDirector.ps1?v=2.4' -OutFile '%PS1%'"
 if errorlevel 1 (
   echo Echec du telechargement de l'installateur.
   pause
