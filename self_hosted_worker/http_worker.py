@@ -8,10 +8,18 @@ uploads finished MP4s back through HTTPS.
 import gc
 import json
 import os
+import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
+
+# When this file is launched as ``python self_hosted_worker/http_worker.py``,
+# Python puts self_hosted_worker/ on sys.path but not necessarily the repository
+# root. The production engine is a sibling package, so make the root explicit.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import httpx
 
