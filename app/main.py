@@ -11,7 +11,7 @@ from typing import Optional
 import psycopg
 import redis
 from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
@@ -27,7 +27,7 @@ AI_MODEL = os.environ.get("AI_MODEL", "gpt-5.6-luna")
 TOKEN_TTL_SECONDS = int(os.environ.get("TOKEN_TTL_SECONDS", str(30 * 24 * 3600)))
 BASE_DIR = Path(__file__).resolve().parent
 
-app = FastAPI(title="Auto Director Studio", version="7.0")
+app = FastAPI(title="Auto Director Studio", version="8.4")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 queue = redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -169,7 +169,7 @@ def health():
         queue_ok = bool(queue.ping())
     except Exception:
         pass
-    return {"ok": db_ok and queue_ok, "database": db_ok, "queue": queue_ok, "version": "7.0", "ai": "openai" if OPENAI_API_KEY else "local-fallback", "aiModel": AI_MODEL if OPENAI_API_KEY else None, "maxUploadMb": MAX_UPLOAD_MB}
+    return {"ok": db_ok and queue_ok, "database": db_ok, "queue": queue_ok, "version": "8.4", "ai": "openai" if OPENAI_API_KEY else "local-fallback", "aiModel": AI_MODEL if OPENAI_API_KEY else None, "maxUploadMb": MAX_UPLOAD_MB}
 
 
 @app.get("/health/deep")
@@ -204,6 +204,19 @@ def login(x: Login):
     if not allowed:
         raise HTTPException(401, "Mot de passe incorrect")
     return {"token": make_token()}
+
+
+@app.get("/api/worker/bootstrap")
+def worker_bootstrap(authorization: Optional[str] = Header(None)):
+    require_auth(authorization)
+    payload = {
+        "databaseUrl": DATABASE_URL,
+        "redisUrl": REDIS_URL,
+        "workerKind": "local",
+        "engine": "8.4",
+        "issuedAt": now().isoformat(),
+    }
+    return JSONResponse(payload, headers={"Cache-Control": "no-store, private", "Pragma": "no-cache"})
 
 
 def serialize_row(row, keys):
