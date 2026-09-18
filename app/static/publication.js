@@ -2,7 +2,7 @@
   const tab=document.getElementById('tab-publication');
   if(!tab)return;
   const style=document.createElement('link');style.rel='stylesheet';style.href='/static/publication.css?v=8.6';document.head.appendChild(style);
-  let currentId='';let cache=[];
+  let currentId='';let cache=[];let readiness={};let creator=null;
   const token=()=>localStorage.getItem('ad_token')||'';
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const notify=(m,t='ok')=>{try{if(typeof toast==='function')return toast(m,t)}catch{}console.log(m)};
@@ -26,10 +26,22 @@
             <label>Caption<textarea id="publicationCaption" maxlength="2200"></textarea></label>
             <label>Hashtags<input id="publicationTags" placeholder="#gaming #fyp"></label>
             <label>CTA<input id="publicationCta" maxlength="300" placeholder="Dis-moi ce que tu aurais fait 👇"></label>
-            <div class="publish-actions"><button id="publicationSaveBtn" class="btn ghost">Enregistrer</button><button id="publicationPublishBtn" class="btn secondary">Publier maintenant</button></div>
+            <div class="publish-actions"><button id="publicationSaveBtn" class="btn ghost">Enregistrer</button></div>
             <div class="publish-schedule"><div class="field"><label>Planifier</label><input id="publicationWhen" type="datetime-local"></div><button id="publicationScheduleBtn" class="btn primary">Planifier</button></div>
+            <div id="tiktokDirect" class="tiktok-direct hidden">
+              <div class="tiktok-direct-head"><div><b>Direct Post officiel</b><span id="tiktokCreatorLabel">Chargement du créateur…</span></div><button id="tiktokStatusBtn" class="btn tiny ghost">Actualiser statut</button></div>
+              <div class="tiktok-grid"><div class="field"><label>Confidentialité</label><select id="tiktokPrivacy"></select></div><div class="field"><label>Marquage IA</label><select id="tiktokAigc"><option value="false">Non</option><option value="true">Oui · contenu généré par IA</option></select></div></div>
+              <div class="tiktok-checks">
+                <label id="tiktokCommentWrap" class="tiktok-check"><input id="tiktokComments" type="checkbox" checked> Autoriser commentaires</label>
+                <label id="tiktokDuetWrap" class="tiktok-check"><input id="tiktokDuet" type="checkbox" checked> Autoriser Duet</label>
+                <label id="tiktokStitchWrap" class="tiktok-check"><input id="tiktokStitch" type="checkbox" checked> Autoriser Stitch</label>
+              </div>
+              <div id="tiktokDirectNote" class="tiktok-warning"></div>
+              <label class="tiktok-consent"><input id="tiktokConsent" type="checkbox"> J’autorise explicitement l’envoi de cette vidéo et de son texte vers TikTok avec ces paramètres.</label>
+              <div class="publish-actions"><button id="tiktokDirectPostBtn" class="btn primary">Envoyer à TikTok</button></div>
+            </div>
           </div>
-          <p class="publish-note"><strong>Publication automatique :</strong> uniquement via l’API officielle TikTok Content Posting et une autorisation OAuth utilisateur. Aucune simulation de publication n’est marquée comme réussie.</p>
+          <p class="publish-note"><strong>Publication automatique :</strong> uniquement via OAuth + Content Posting API officiels. Le titre reste modifiable et aucun envoi ne démarre sans consentement explicite.</p>
         </section>
         <section class="card publish-card">
           <div class="card-head"><div><span class="step">02</span><h3>File de publication</h3></div><button id="publicationRefreshBtn" class="btn tiny ghost">↻</button></div>
@@ -55,37 +67,61 @@
     const asset=document.getElementById('publicationAsset').value;if(!asset)return notify('Choisis un rendu.','error');
     const editor=document.getElementById('publicationEditor');
     const body=editor.classList.contains('hidden')?{}:{caption:document.getElementById('publicationCaption').value,hashtags:tagsArray(),cta:document.getElementById('publicationCta').value};
-    try{const r=await api('/api/publications/prepare/'+asset,{method:'POST',body:JSON.stringify(body)});fillEditor(r.pack,r.id);notify('Publication ajoutée à la file.');await loadQueue()}catch(e){notify(e.message,'error')}
+    try{const r=await api('/api/publications/prepare/'+asset,{method:'POST',body:JSON.stringify(body)});fillEditor(r.pack,r.id);notify('Publication ajoutée à la file.');await loadQueue();await maybeLoadCreator()}catch(e){notify(e.message,'error')}
   }
-  async function save(){
-    if(!currentId)return notify('Ajoute d’abord ce pack à la file.','error');
-    try{await api('/api/publications/'+currentId,{method:'PATCH',body:JSON.stringify({caption:document.getElementById('publicationCaption').value,hashtags:tagsArray(),cta:document.getElementById('publicationCta').value})});notify('Publication enregistrée.');await loadQueue()}catch(e){notify(e.message,'error')}
+  async function save(showToast=true){
+    if(!currentId){if(showToast)notify('Ajoute d’abord ce pack à la file.','error');return false}
+    try{await api('/api/publications/'+currentId,{method:'PATCH',body:JSON.stringify({caption:document.getElementById('publicationCaption').value,hashtags:tagsArray(),cta:document.getElementById('publicationCta').value})});if(showToast)notify('Publication enregistrée.');await loadQueue();return true}catch(e){notify(e.message,'error');return false}
   }
   async function schedule(){
     if(!currentId)return notify('Ajoute d’abord ce pack à la file.','error');
     const value=document.getElementById('publicationWhen').value;if(!value)return notify('Choisis une date et une heure.','error');
-    try{await save();await api('/api/publications/'+currentId+'/schedule',{method:'POST',body:JSON.stringify({scheduledAt:new Date(value).toISOString()})});notify('Publication planifiée.');await loadQueue()}catch(e){notify(e.message,'error')}
-  }
-  async function publish(id=currentId){
-    if(!id)return notify('Ajoute d’abord ce pack à la file.','error');
-    try{if(id===currentId)await save();await api('/api/publications/'+id+'/publish',{method:'POST'});notify('Publication envoyée à TikTok.');await loadQueue()}catch(e){notify(e.message,'error')}
+    try{if(!(await save(false)))return;await api('/api/publications/'+currentId+'/schedule',{method:'POST',body:JSON.stringify({scheduledAt:new Date(value).toISOString()})});notify('Publication planifiée.');await loadQueue()}catch(e){notify(e.message,'error')}
   }
   async function connectTikTok(){
     try{const r=await api('/api/tiktok/connect',{method:'POST'});if(!r.authorizationUrl)throw Error('URL OAuth TikTok absente');location.href=r.authorizationUrl}catch(e){notify(e.message,'error')}
   }
   async function disconnectTikTok(){
     if(!confirm('Déconnecter le compte TikTok du Studio ?'))return;
-    try{await api('/api/tiktok/disconnect',{method:'POST'});notify('TikTok déconnecté.');await loadCapabilities()}catch(e){notify(e.message,'error')}
+    try{await api('/api/tiktok/disconnect',{method:'POST'});creator=null;document.getElementById('tiktokDirect').classList.add('hidden');notify('TikTok déconnecté.');await loadCapabilities()}catch(e){notify(e.message,'error')}
+  }
+  function applyCreator(c){
+    creator=c;const privacy=document.getElementById('tiktokPrivacy');privacy.innerHTML=(c.privacyLevels||[]).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    const controls=[['tiktokComments','tiktokCommentWrap',c.commentDisabled],['tiktokDuet','tiktokDuetWrap',c.duetDisabled],['tiktokStitch','tiktokStitchWrap',c.stitchDisabled]];
+    controls.forEach(([id,wrap,disabled])=>{const input=document.getElementById(id);input.disabled=!!disabled;input.checked=!disabled;document.getElementById(wrap).classList.toggle('disabled',!!disabled)});
+    document.getElementById('tiktokCreatorLabel').textContent=`${c.nickname||c.username||'Créateur'}${c.maxDurationSec?' · max '+c.maxDurationSec+'s':''}`;
+    const panel=document.getElementById('tiktokDirect');panel.classList.remove('hidden');
+    const note=document.getElementById('tiktokDirectNote'),button=document.getElementById('tiktokDirectPostBtn');
+    if(!readiness.pullUrlVerified){note.textContent='Direct Post verrouillé : le préfixe '+(readiness.pullUrlPrefix||'média')+' doit d’abord être vérifié dans TikTok Developer.';button.disabled=true}
+    else{note.className='tiktok-ready-note';note.textContent='Préfixe média vérifié. Vérifie les paramètres puis donne ton consentement avant l’envoi.';button.disabled=false}
+  }
+  async function maybeLoadCreator(){
+    if(!readiness.directPostReady)return;
+    try{applyCreator(await api('/api/tiktok/creator-info'))}catch(e){document.getElementById('tiktokDirectNote').textContent=e.message}
+  }
+  async function directPost(){
+    if(!currentId)return notify('Choisis une publication préparée.','error');
+    if(!readiness.pullUrlVerified)return notify('Le préfixe média TikTok n’est pas encore vérifié.','error');
+    if(!document.getElementById('tiktokConsent').checked)return notify('Ton consentement explicite est requis.','error');
+    const privacy=document.getElementById('tiktokPrivacy').value;if(!privacy)return notify('Choisis un niveau de confidentialité TikTok.','error');
+    if(!(await save(false)))return;
+    const body={privacyLevel:privacy,allowComment:document.getElementById('tiktokComments').checked,allowDuet:document.getElementById('tiktokDuet').checked,allowStitch:document.getElementById('tiktokStitch').checked,isAigc:document.getElementById('tiktokAigc').value==='true',consent:true};
+    try{const r=await api('/api/tiktok/direct-post/'+currentId,{method:'POST',body:JSON.stringify(body)});document.getElementById('tiktokConsent').checked=false;notify(r.message||'Vidéo envoyée à TikTok.');await loadQueue()}catch(e){notify(e.message,'error')}
+  }
+  async function refreshPostStatus(id=currentId){
+    if(!id)return notify('Choisis une publication.','error');
+    try{const r=await api('/api/tiktok/post-status/'+id,{method:'POST'});notify(r.status==='published'?'Publication TikTok terminée.':r.status==='failed'?'Échec TikTok : '+(r.failReason||'inconnu'):'TikTok traite encore la vidéo.',r.status==='failed'?'error':'ok');await loadQueue()}catch(e){notify(e.message,'error')}
   }
   function loadItem(id){
-    const x=cache.find(v=>v.id===id);if(!x)return;currentId=x.id;fillEditor(x,x.id);const select=document.getElementById('publicationAsset');if(select)select.value=x.assetId;window.scrollTo({top:0,behavior:'smooth'});
+    const x=cache.find(v=>v.id===id);if(!x)return;currentId=x.id;fillEditor(x,x.id);const select=document.getElementById('publicationAsset');if(select)select.value=x.assetId;document.getElementById('tiktokConsent').checked=false;maybeLoadCreator();window.scrollTo({top:0,behavior:'smooth'});
   }
   function renderQueue(){
     const el=document.getElementById('publicationQueue');if(!el)return;
     if(!cache.length){el.innerHTML='<div class="publication-empty">Aucune publication préparée.</div>';return}
-    el.innerHTML=cache.map(x=>`<article class="publication-item"><div class="publication-item-head"><div><h4>${esc(x.assetName||'Rendu')}</h4><small>${esc(x.projectName||'Projet')} · TikTok</small></div><span class="publication-status-badge ${esc(x.status)}">${esc(x.status)}</span></div><p>${esc(x.caption||'')}</p><div class="publication-meta">${x.scheduledAt?'Planifiée : '+new Date(x.scheduledAt).toLocaleString('fr-FR'):x.createdAt?'Créée : '+new Date(x.createdAt).toLocaleString('fr-FR'):''}</div><div class="publication-item-actions"><button class="btn tiny ghost" data-load-publication="${x.id}">Modifier</button><button class="btn tiny secondary" data-publish-publication="${x.id}">Publier</button></div></article>`).join('');
+    el.innerHTML=cache.map(x=>{const statusBtn=x.status==='publishing'?`<button class="btn tiny secondary" data-status-publication="${x.id}">Statut TikTok</button>`:`<button class="btn tiny secondary" data-open-publication="${x.id}">Publier</button>`;return `<article class="publication-item"><div class="publication-item-head"><div><h4>${esc(x.assetName||'Rendu')}</h4><small>${esc(x.projectName||'Projet')} · TikTok</small></div><span class="publication-status-badge ${esc(x.status)}">${esc(x.status)}</span></div><p>${esc(x.caption||'')}</p><div class="publication-meta">${x.scheduledAt?'Planifiée : '+new Date(x.scheduledAt).toLocaleString('fr-FR'):x.publishedAt?'Publiée : '+new Date(x.publishedAt).toLocaleString('fr-FR'):x.createdAt?'Créée : '+new Date(x.createdAt).toLocaleString('fr-FR'):''}</div><div class="publication-item-actions"><button class="btn tiny ghost" data-load-publication="${x.id}">Modifier</button>${statusBtn}</div></article>`}).join('');
     el.querySelectorAll('[data-load-publication]').forEach(b=>b.onclick=()=>loadItem(b.dataset.loadPublication));
-    el.querySelectorAll('[data-publish-publication]').forEach(b=>b.onclick=()=>publish(b.dataset.publishPublication));
+    el.querySelectorAll('[data-open-publication]').forEach(b=>b.onclick=()=>{loadItem(b.dataset.openPublication);notify('Vérifie les paramètres TikTok puis confirme le consentement.')});
+    el.querySelectorAll('[data-status-publication]').forEach(b=>b.onclick=()=>refreshPostStatus(b.dataset.statusPublication));
   }
   async function loadQueue(){
     if(!token())return;try{const r=await api('/api/publications');cache=r.items||[];renderQueue()}catch(e){const el=document.getElementById('publicationQueue');if(el)el.innerHTML='<div class="publication-empty">'+esc(e.message)+'</div>'}
@@ -93,22 +129,25 @@
   async function loadCapabilities(){
     if(!token())return;const el=document.getElementById('publicationCapability');if(!el)return;
     try{
-      const x=await api('/api/publications/capabilities');el.className='publish-status '+(x.autoPublishReady?'ready':'');
+      const [x,r]=await Promise.all([api('/api/publications/capabilities'),api('/api/tiktok/readiness')]);readiness=r||{};el.className='publish-status '+(r.directPostOperational?'ready':'');
       let title='TikTok en mode préparation',detail='Application TikTok Developer non configurée.',action='';
       if(x.officialOAuthConfigured&&!x.oauthConnected){title='TikTok prêt à être connecté';detail='OAuth officiel configuré · autorise ton compte TikTok.';action='<button id="tiktokConnectBtn" class="btn tiny primary">Connecter TikTok</button>'}
       if(x.oauthConnected&&!x.autoPublishReady){title='TikTok connecté';detail='Connexion chiffrée active · le scope video.publish manque encore.';action='<button id="tiktokDisconnectBtn" class="btn tiny ghost">Déconnecter</button>'}
-      if(x.autoPublishReady){title='TikTok connecté · Direct Post autorisé';detail='Le scope video.publish est présent. Validation des paramètres de publication encore requise.';action='<button id="tiktokDisconnectBtn" class="btn tiny ghost">Déconnecter</button>'}
+      if(x.autoPublishReady&&!r.pullUrlVerified){title='TikTok connecté · URL à vérifier';detail='video.publish est autorisé, mais le préfixe média doit être vérifié dans TikTok Developer.';action='<button id="tiktokDisconnectBtn" class="btn tiny ghost">Déconnecter</button>'}
+      if(r.directPostOperational){title='TikTok Direct Post prêt';detail='OAuth, scope video.publish et préfixe média sont prêts. Consentement requis à chaque envoi.';action='<button id="tiktokDisconnectBtn" class="btn tiny ghost">Déconnecter</button>'}
       el.innerHTML=`<i></i><div><b>${title}</b><span>${detail}</span></div>${action}`;
       document.getElementById('tiktokConnectBtn')?.addEventListener('click',connectTikTok);document.getElementById('tiktokDisconnectBtn')?.addEventListener('click',disconnectTikTok);
+      if(x.autoPublishReady)await maybeLoadCreator();else document.getElementById('tiktokDirect').classList.add('hidden');
     }catch(e){el.innerHTML='<i></i><div><b>État TikTok indisponible</b><span>'+esc(e.message)+'</span></div>'}
   }
   function bind(){
     document.getElementById('publicationPreviewBtn').onclick=preview;
     document.getElementById('publicationPrepareBtn').onclick=prepare;
-    document.getElementById('publicationSaveBtn').onclick=save;
+    document.getElementById('publicationSaveBtn').onclick=()=>save(true);
     document.getElementById('publicationScheduleBtn').onclick=schedule;
-    document.getElementById('publicationPublishBtn').onclick=()=>publish();
     document.getElementById('publicationRefreshBtn').onclick=()=>{loadQueue();loadCapabilities()};
+    document.getElementById('tiktokDirectPostBtn').onclick=directPost;
+    document.getElementById('tiktokStatusBtn').onclick=()=>refreshPostStatus();
     document.querySelector('[data-tab="publication"]')?.addEventListener('click',()=>setTimeout(()=>{loadQueue();loadCapabilities()},40));
   }
   install();
