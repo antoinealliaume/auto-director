@@ -7,6 +7,14 @@
     return r+(info?.fps?` @ ${info.fps} fps`:'');
   };
 
+  function markStudioOnline(){
+    const dot=byId('statusDot'),service=byId('serviceLabel');
+    if(dot)dot.className='ok';
+    if(service)service.textContent='Services en ligne';
+    const brand=document.querySelector('.brand span');
+    if(brand)brand.textContent='Studio V8.5';
+  }
+
   function paintOffline(reason='Aucun heartbeat worker reçu.'){
     const label=byId('workerStatusLabel'),detail=byId('workerStatusDetail'),led=byId('workerStatusLed'),stat=byId('statWorker');
     const profile=byId('workerProfilePill'),render=byId('workerRenderPill'),ai=byId('workerAiPill'),queue=byId('workerQueuePill');
@@ -29,6 +37,7 @@
     const profile=byId('workerProfilePill');
     const render=byId('workerRenderPill');
     const ai=byId('workerAiPill');
+    const statAi=byId('statAi');
     const queue=byId('workerQueuePill');
     if(!label||!detail||!led)return;
     try{
@@ -38,10 +47,12 @@
       clearTimeout(timer);
       if(!r.ok)throw new Error(`status ${r.status}`);
       const h=await r.json();
+      markStudioOnline();
       const info=h.worker||{};
       const kind=h.activeWorker;
       if(!h.ok||!kind){
         paintOffline(h.queueDepth>0?`Aucun worker actif pour le moment · ${h.queueDepth} job(s) conservé(s).`:'Aucun worker actif pour le moment.');
+        if(statAi)statAi.textContent='V8';
         return;
       }
       const local=kind==='local';
@@ -54,16 +65,16 @@
         if(profile)profile.textContent='Profil '+safe(info.profile||'safe');
         if(render)render.textContent=renderLabel(info);
         if(ai)ai.textContent=localAI?`IA ${safe(info.model)}`:'IA lourde désactivée';
+        if(statAi)statAi.textContent=localAI?'Local AI':'V8 local';
       }else{
         detail.textContent='Le worker Render est vivant et traite les jobs tant que le PC local n’est pas connecté.';
         if(profile)profile.textContent='Fallback '+safe(info.profile||'cloud-safe');
         if(render)render.textContent=renderLabel(info);
         if(ai)ai.textContent='Director V8 local';
+        if(statAi)statAi.textContent='V8 local';
       }
       if(queue)queue.textContent=`File ${Number(h.queueDepth||0)} job(s)`;
     }catch(e){
-      // A same-origin failure now means the Studio API itself could not report status.
-      // We keep the wording recoverable because durable PostgreSQL jobs are not lost.
       paintOffline('État du worker temporairement indisponible.');
     }
   }
