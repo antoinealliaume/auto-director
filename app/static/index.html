@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Auto Director Studio</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="/static/worker-status.css?v=8.5.2" />
+  <link rel="stylesheet" href="/static/worker-status.css?v=8.6" />
 </head>
 <body>
 <div id="toast" class="toast"></div>
@@ -23,7 +23,7 @@
 
 <div id="studio" class="layout hidden">
   <aside class="sidebar">
-    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V8.5</span></div></div>
+    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V8.6</span></div></div>
     <nav id="nav">
       <button data-tab="studio" class="active">Studio</button>
       <button data-tab="pipeline">Pipeline <span id="navJobs" class="counter">0</span></button>
@@ -64,7 +64,7 @@
         <div class="worker-controls">
           <button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button>
           <span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span>
-          <a href="/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=8.5.2" download="INSTALL_AUTO_DIRECTOR_WORKER.bat" style="font-size:11px;color:#9aa4ff;text-decoration:none">Téléchargement direct</a>
+          <a href="/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=8.6" download="INSTALL_AUTO_DIRECTOR_WORKER.bat" style="font-size:11px;color:#9aa4ff;text-decoration:none">Téléchargement direct</a>
         </div>
       </div>
 
@@ -112,6 +112,7 @@
   </main>
 </div>
 <script src="/static/app.js"></script>
-<script src="/static/worker-status.js?v=8.5.2"></script>
+<script src="/static/secure-media.js?v=8.6"></script>
+<script src="/static/worker-status.js?v=8.6"></script>
 </body>
 </html>
