@@ -1,7 +1,7 @@
 (()=>{
   const STATUS_URL='/api/worker-status';
   const LOCAL_AGENT_URL='http://127.0.0.1:8765';
-  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat';
+  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=8.5.2';
   const byId=id=>document.getElementById(id);
   const safe=v=>v==null?'—':String(v);
   let agentState={online:false,workerRunning:false,busy:false};
@@ -18,12 +18,19 @@
 
   function ensureControls(){
     const banner=byId('workerBanner');
-    if(!banner||byId('localWorkerControl'))return;
-    const box=document.createElement('div');
-    box.className='worker-controls';
-    box.innerHTML='<button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button><span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span>';
-    banner.appendChild(box);
-    byId('localWorkerControl').onclick=handleLocalWorkerClick;
+    if(!banner)return;
+    let button=byId('localWorkerControl');
+    if(!button){
+      const box=document.createElement('div');
+      box.className='worker-controls';
+      box.innerHTML='<button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button><span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span>';
+      banner.appendChild(box);
+      button=byId('localWorkerControl');
+    }
+    if(button && button.dataset.bound!=='1'){
+      button.addEventListener('click',handleLocalWorkerClick);
+      button.dataset.bound='1';
+    }
   }
 
   function renderAgentControl(){
@@ -75,8 +82,11 @@
     const a=document.createElement('a');
     a.href=INSTALLER_URL;
     a.download='INSTALL_AUTO_DIRECTOR_WORKER.bat';
-    document.body.appendChild(a);a.click();a.remove();
-    notify('Installateur téléchargé. Ouvre-le une seule fois, puis reviens ici.');
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>a.remove(),1000);
+    notify('Téléchargement lancé. Ouvre INSTALL_AUTO_DIRECTOR_WORKER.bat dans tes téléchargements, puis reviens ici.');
   }
 
   async function agentPost(path,body={}){
