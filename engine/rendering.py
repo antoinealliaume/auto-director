@@ -2,7 +2,7 @@
 import asyncio, re
 from pathlib import Path
 from edge_tts import Communicate
-from .config import FFMPEG, FFMPEG_THREADS, RENDER_WIDTH as W, RENDER_HEIGHT as H, run
+from .config import FFMPEG, FFMPEG_THREADS, RENDER_WIDTH as W, RENDER_HEIGHT as H, RENDER_FPS as FPS, run
 from .analysis import probe, black_ratio, freeze_ratio
 
 def has_drawtext():
@@ -15,7 +15,7 @@ def safe_text(text):
 
 def video_filter(zoom,hook_file=None,caption_file=None):
     zw=max(W,int(round(W*float(zoom)/2)*2));zh=max(H,int(round(H*float(zoom)/2)*2))
-    filters=[f'scale={W}:{H}:force_original_aspect_ratio=increase',f'crop={W}:{H}',f'scale={zw}:{zh}',f'crop={W}:{H}','fps=30','setsar=1']
+    filters=[f'scale={W}:{H}:force_original_aspect_ratio=increase',f'crop={W}:{H}',f'scale={zw}:{zh}',f'crop={W}:{H}',f'fps={FPS}','setsar=1']
     if DRAWTEXT and hook_file:
         filters.append(f"drawtext=textfile='{hook_file.as_posix()}':fontcolor=white:fontsize={max(32,int(W*.058))}:borderw=4:bordercolor=black:x=(w-text_w)/2:y={int(H*.075)}:box=1:boxcolor=black@0.36:boxborderw=14")
     if DRAWTEXT and caption_file:
@@ -71,4 +71,4 @@ def critic(path,target,plan):
     if freeze>.12:diagnostics.append('low_motion_output')
     if diversity<.5:diagnostics.append('low_source_diversity')
     if duration_fit<.8:diagnostics.append('duration_mismatch')
-    return round(max(0,min(100,score)),1),{'duration':round(duration,2),'blackRatio':round(black,3),'freezeRatio':round(freeze,3),'resolution':res,'first3s':round(first,1),'momentQuality':round(avg,1),'payoff':round(payoff,1),'diversity':round(diversity,3),'diagnostics':diagnostics}
+    return round(max(0,min(100,score)),1),{'duration':round(duration,2),'blackRatio':round(black,3),'freezeRatio':round(freeze,3),'resolution':res,'fps':FPS,'first3s':round(first,1),'momentQuality':round(avg,1),'payoff':round(payoff,1),'diversity':round(diversity,3),'diagnostics':diagnostics}
