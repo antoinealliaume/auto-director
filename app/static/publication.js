@@ -70,6 +70,13 @@
     if(!id)return notify('Ajoute d’abord ce pack à la file.','error');
     try{if(id===currentId)await save();await api('/api/publications/'+id+'/publish',{method:'POST'});notify('Publication envoyée à TikTok.');await loadQueue()}catch(e){notify(e.message,'error')}
   }
+  async function connectTikTok(){
+    try{const r=await api('/api/tiktok/connect',{method:'POST'});if(!r.authorizationUrl)throw Error('URL OAuth TikTok absente');location.href=r.authorizationUrl}catch(e){notify(e.message,'error')}
+  }
+  async function disconnectTikTok(){
+    if(!confirm('Déconnecter le compte TikTok du Studio ?'))return;
+    try{await api('/api/tiktok/disconnect',{method:'POST'});notify('TikTok déconnecté.');await loadCapabilities()}catch(e){notify(e.message,'error')}
+  }
   function loadItem(id){
     const x=cache.find(v=>v.id===id);if(!x)return;currentId=x.id;fillEditor(x,x.id);const select=document.getElementById('publicationAsset');if(select)select.value=x.assetId;window.scrollTo({top:0,behavior:'smooth'});
   }
@@ -85,7 +92,15 @@
   }
   async function loadCapabilities(){
     if(!token())return;const el=document.getElementById('publicationCapability');if(!el)return;
-    try{const x=await api('/api/publications/capabilities');el.className='publish-status '+(x.autoPublishReady?'ready':'');el.innerHTML=`<i></i><div><b>${x.autoPublishReady?'TikTok prêt à publier':'TikTok en mode préparation'}</b><span>${x.officialOAuthConfigured?'OAuth application configuré · connexion utilisateur encore requise':'OAuth TikTok officiel non connecté · les vidéos restent prêtes dans la file'}</span></div>`}catch(e){el.innerHTML='<i></i><div><b>État TikTok indisponible</b><span>'+esc(e.message)+'</span></div>'}
+    try{
+      const x=await api('/api/publications/capabilities');el.className='publish-status '+(x.autoPublishReady?'ready':'');
+      let title='TikTok en mode préparation',detail='Application TikTok Developer non configurée.',action='';
+      if(x.officialOAuthConfigured&&!x.oauthConnected){title='TikTok prêt à être connecté';detail='OAuth officiel configuré · autorise ton compte TikTok.';action='<button id="tiktokConnectBtn" class="btn tiny primary">Connecter TikTok</button>'}
+      if(x.oauthConnected&&!x.autoPublishReady){title='TikTok connecté';detail='Connexion chiffrée active · le scope video.publish manque encore.';action='<button id="tiktokDisconnectBtn" class="btn tiny ghost">Déconnecter</button>'}
+      if(x.autoPublishReady){title='TikTok connecté · Direct Post autorisé';detail='Le scope video.publish est présent. Validation des paramètres de publication encore requise.';action='<button id="tiktokDisconnectBtn" class="btn tiny ghost">Déconnecter</button>'}
+      el.innerHTML=`<i></i><div><b>${title}</b><span>${detail}</span></div>${action}`;
+      document.getElementById('tiktokConnectBtn')?.addEventListener('click',connectTikTok);document.getElementById('tiktokDisconnectBtn')?.addEventListener('click',disconnectTikTok);
+    }catch(e){el.innerHTML='<i></i><div><b>État TikTok indisponible</b><span>'+esc(e.message)+'</span></div>'}
   }
   function bind(){
     document.getElementById('publicationPreviewBtn').onclick=preview;
