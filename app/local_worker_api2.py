@@ -4,8 +4,10 @@ import hmac
 import json
 import os
 import secrets
+import tempfile
 import time
 import uuid
+from pathlib import Path
 from typing import Optional
 
 import psycopg
@@ -15,6 +17,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
 
+import storage_backend as media_store
+from storage_schema import ensure_storage_schema
 from engine.memory import load_context
 
 DATABASE_URL = os.environ.get('DATABASE_URL','')
@@ -58,6 +62,7 @@ def require_worker(auth):
 
 def ensure_schema():
     with db() as c:
+        ensure_storage_schema(c)
         c.execute('''create table if not exists worker_leases(
             job_id uuid primary key references jobs(id) on delete cascade,
             worker_id text not null,lease_expires timestamptz not null,
@@ -135,9 +140,13 @@ def attach(app):
     async def asset(asset_id:str,jobId:str=Query(...),authorization:Optional[str]=Header(None)):
         wid=require_worker(authorization);jid=uuid.UUID(jobId);pid,settings,status=check_lease(jid,wid);aid=uuid.UUID(asset_id)
         allowed={str(x) for x in (settings or {}).get('assetIds',[])}
-        with db() as c:row=c.execute("select name,content_type,data,role from assets where id=%s and project_id=%s and kind='source'",(aid,pid)).fetchone()
+        with db() as c:
+            ensure_storage_schema(c)
+            row=c.execute("select name,content_type,data,role,storage_key from assets where id=%s and project_id=%s and kind='source'",(aid,pid)).fetchone()
         if not row or (str(aid) not in allowed and row[3]!='reference'):raise HTTPException(404,'Asset worker introuvable')
-        return Response(bytes(row[2]),media_type=row[1],headers={'Content-Disposition':f'attachment; filename="{row[0]}"','Cache-Control':'no-store'})
+        try:payload=media_store.read_asset(row[4],row[2])
+        except Exception as exc:raise HTTPException(503,'Média source indisponible') from exc
+        return Response(payload,media_type=row[1],headers={'Content-Disposition':f'attachment; filename="{row[0]}"','Cache-Control':'no-store'})
 
     async def progress(job_id:str,x:ProgressIn,authorization:Optional[str]=Header(None)):
         wid=require_worker(authorization);jid=uuid.UUID(job_id);_,_,status=check_lease(jid,wid)
@@ -159,22 +168,39 @@ def attach(app):
     async def output(job_id:str,file:UploadFile=File(...),metadata_json:str=Form('{}'),authorization:Optional[str]=Header(None)):
         wid=require_worker(authorization);jid=uuid.UUID(job_id);pid,_,status=check_lease(jid,wid)
         if status=='cancelled':raise HTTPException(409,'Job annulé')
-        limit=MAX_OUTPUT_MB*1024*1024;parts=[];total=0
-        while True:
-            b=await file.read(1024*1024)
-            if not b:break
-            total+=len(b)
-            if total>limit:raise HTTPException(413,f'Rendu > {MAX_OUTPUT_MB} Mo')
-            parts.append(b)
-        if not parts:raise HTTPException(400,'Rendu vide')
-        try:meta=json.loads(metadata_json) if metadata_json else {}
-        except Exception:meta={}
-        if not isinstance(meta,dict):meta={}
-        aid=uuid.uuid4();name=os.path.basename(file.filename or f'AutoDirector_{aid}.mp4')[:180];blob=b''.join(parts)
-        with db() as c:
-            c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata) values(%s,%s,%s,'video/mp4',%s,'render','render',%s,%s)",(aid,pid,name,len(blob),blob,Jsonb(meta)))
-            c.execute("update jobs set output_asset_ids=array_append(output_asset_ids,%s),updated_at=now() where id=%s and not (%s=any(output_asset_ids))",(aid,jid,aid))
-        return {'ok':True,'assetId':str(aid),'size':len(blob)}
+        limit=MAX_OUTPUT_MB*1024*1024;total=0;tmp_path=None;storage_key=None
+        try:
+            suffix=Path(file.filename or 'render.mp4').suffix or '.mp4'
+            with tempfile.NamedTemporaryFile(prefix='ad_local_output_',suffix=suffix,delete=False) as tmp:
+                tmp_path=Path(tmp.name)
+                while True:
+                    b=await file.read(1024*1024)
+                    if not b:break
+                    total+=len(b)
+                    if total>limit:raise HTTPException(413,f'Rendu > {MAX_OUTPUT_MB} Mo')
+                    tmp.write(b)
+            if total<=0:raise HTTPException(400,'Rendu vide')
+            try:meta=json.loads(metadata_json) if metadata_json else {}
+            except Exception:meta={}
+            if not isinstance(meta,dict):meta={}
+            aid=uuid.uuid4();name=os.path.basename(file.filename or f'AutoDirector_{aid}.mp4')[:180]
+            data,storage_key,backend,checksum=media_store.persist_file(pid,aid,'render',name,tmp_path,'video/mp4')
+            meta={**meta,'storageBackend':backend,'checksumSha256':checksum}
+            try:
+                with db() as c:
+                    ensure_storage_schema(c)
+                    c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata,storage_key,storage_backend,checksum_sha256) values(%s,%s,%s,'video/mp4',%s,'render','render',%s,%s,%s,%s,%s)",(aid,pid,name,total,data,Jsonb(meta),storage_key,backend,checksum))
+                    c.execute("update jobs set output_asset_ids=array_append(output_asset_ids,%s),updated_at=now() where id=%s and not (%s=any(output_asset_ids))",(aid,jid,aid))
+            except Exception:
+                if storage_key:
+                    try:media_store.delete(storage_key)
+                    except Exception:pass
+                raise
+            return {'ok':True,'assetId':str(aid),'size':total,'storage':backend}
+        finally:
+            if tmp_path:
+                try:tmp_path.unlink(missing_ok=True)
+                except Exception:pass
 
     async def complete(job_id:str,x:CompleteIn,authorization:Optional[str]=Header(None)):
         wid=require_worker(authorization);jid=uuid.UUID(job_id);check_lease(jid,wid)
