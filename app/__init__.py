@@ -8,6 +8,7 @@ import fastapi as _fastapi
 from .worker_status import attach as _attach_worker_status
 from .local_worker_api2 import attach as _attach_local_worker_api
 from .media_api import attach as _attach_media_api
+from .storage_api import attach as _attach_storage_api
 from .security import attach as _attach_security
 
 _BaseFastAPI = _fastapi.FastAPI
@@ -20,6 +21,7 @@ class AutoDirectorFastAPI(_BaseFastAPI):
         _attach_worker_status(self)
         _attach_local_worker_api(self)
         _attach_media_api(self)
+        _attach_storage_api(self)
 
 
 _fastapi.FastAPI = AutoDirectorFastAPI
