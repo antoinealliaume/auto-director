@@ -19,43 +19,51 @@ def main():
     def ffmpeg_check():
         from imageio_ffmpeg import get_ffmpeg_exe
         import subprocess
-        exe=get_ffmpeg_exe()
-        p=subprocess.run([exe,'-version'],capture_output=True,text=True,timeout=15)
-        if p.returncode:raise RuntimeError('FFmpeg ne demarre pas')
+        exe=get_ffmpeg_exe();p=subprocess.run([exe,'-version'],capture_output=True,text=True,timeout=15)
+        if p.returncode:raise RuntimeError('FFmpeg ne démarre pas')
         return (p.stdout.splitlines() or ['FFmpeg OK'])[0]
     results.append(check('FFmpeg',ffmpeg_check,True))
 
-    db_url=os.environ.get('DATABASE_URL','').strip()
-    redis_url=os.environ.get('REDIS_URL','').strip()
+    remote=os.environ.get('REMOTE_WORKER_MODE','0')=='1'
+    studio=os.environ.get('STUDIO_URL','https://auto-director-web.onrender.com').rstrip('/')
+    token=os.environ.get('WORKER_TOKEN','').strip()
 
-    def db_check():
-        if not db_url or 'USER:PASSWORD' in db_url:raise RuntimeError('DATABASE_URL non configuree')
-        import psycopg
-        with psycopg.connect(db_url,connect_timeout=8) as c:
-            return 'select 1 = '+str(c.execute('select 1').fetchone()[0])
-    results.append(check('PostgreSQL',db_check,True))
-
-    def redis_check():
-        if not redis_url or 'PASSWORD' in redis_url:raise RuntimeError('REDIS_URL non configuree')
-        import redis
-        r=redis.from_url(redis_url,decode_responses=True,socket_connect_timeout=8,socket_timeout=8)
-        return 'ping = '+str(bool(r.ping()))
-    results.append(check('Redis',redis_check,True))
+    if remote:
+        def studio_check():
+            if studio!='https://auto-director-web.onrender.com':raise RuntimeError('STUDIO_URL non autorisée')
+            if not token:raise RuntimeError('WORKER_TOKEN absent')
+            import httpx
+            with httpx.Client(timeout=12,follow_redirects=True) as c:
+                r=c.post(studio+'/api/local-worker/heartbeat',headers={'Authorization':'Bearer '+token},json={'engine':'doctor','profile':'preflight','resolution':[720,1280],'fps':24,'ffmpegThreads':1,'localAI':False})
+                r.raise_for_status()
+            return 'HTTPS worker API = OK'
+        results.append(check('Studio HTTPS',studio_check,True))
+        results.append({'name':'Secrets cloud','ok':not bool(os.environ.get('DATABASE_URL') or os.environ.get('REDIS_URL')),'critical':False,'detail':'PostgreSQL/Redis non requis sur le PC'})
+    else:
+        db_url=os.environ.get('DATABASE_URL','').strip();redis_url=os.environ.get('REDIS_URL','').strip()
+        def db_check():
+            if not db_url:raise RuntimeError('DATABASE_URL non configurée')
+            import psycopg
+            with psycopg.connect(db_url,connect_timeout=8) as c:return 'select 1 = '+str(c.execute('select 1').fetchone()[0])
+        def redis_check():
+            if not redis_url:raise RuntimeError('REDIS_URL non configurée')
+            import redis
+            r=redis.from_url(redis_url,decode_responses=True,socket_connect_timeout=8,socket_timeout=8);return 'ping = '+str(bool(r.ping()))
+        results.append(check('PostgreSQL',db_check,True));results.append(check('Redis',redis_check,True))
 
     profile=os.environ.get('PROFILE_NAME','safe-unknown')
-    results.append({'name':'Profil materiel','ok':True,'critical':False,'detail':profile})
+    results.append({'name':'Profil matériel','ok':True,'critical':False,'detail':profile})
 
     def ollama_check():
         url=os.environ.get('LOCAL_VLM_URL','').strip()
-        if not url:return 'desactive volontairement'
+        if not url:return 'désactivé volontairement'
         import httpx
-        with httpx.Client(timeout=4) as c:
-            r=c.get(url.rstrip('/')+'/api/tags');r.raise_for_status()
+        with httpx.Client(timeout=4) as c:r=c.get(url.rstrip('/')+'/api/tags');r.raise_for_status()
         return 'disponible'
     results.append(check('Ollama local',ollama_check,False))
 
     failed=[x for x in results if x['critical'] and not x['ok']]
-    report={'ok':not failed,'profile':profile,'checks':results}
+    report={'ok':not failed,'profile':profile,'transport':'https' if remote else 'cloud-internal','checks':results}
     print(json.dumps(report,ensure_ascii=False))
     for x in results:
         mark='OK' if x['ok'] else ('ERREUR' if x['critical'] else 'OPTIONNEL')
@@ -63,5 +71,4 @@ def main():
     return 0 if not failed else 2
 
 
-if __name__=='__main__':
-    raise SystemExit(main())
+if __name__=='__main__':raise SystemExit(main())
