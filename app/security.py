@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import hashlib
+import json
 import os
 
 import redis
@@ -11,6 +12,7 @@ REDIS_URL = os.environ.get('REDIS_URL', '')
 LOGIN_LIMIT = max(5, min(30, int(os.environ.get('LOGIN_LIMIT', '10'))))
 LOGIN_WINDOW = max(60, min(3600, int(os.environ.get('LOGIN_WINDOW_SECONDS', '600'))))
 GLOBAL_LOGIN_LIMIT = max(50, min(500, int(os.environ.get('GLOBAL_LOGIN_LIMIT', '120'))))
+LOCAL_HEARTBEAT = 'autodirector:worker:local:heartbeat'
 
 
 def _queue():
@@ -35,6 +37,23 @@ def _studio_authorized(request):
         return False
 
 
+def _legacy_local_worker(request):
+    """Return True only when the authenticated local worker heartbeat proves it is pre-V9."""
+    try:
+        from .local_worker_api2 import require_worker
+        wid = require_worker(request.headers.get('authorization'))
+        q = _queue()
+        raw = q.get(LOCAL_HEARTBEAT) if q else None
+        info = json.loads(raw) if raw else {}
+        if str(info.get('workerId') or '') != str(wid):
+            return False
+        engine = str(info.get('engine') or '0').strip()
+        major = int(engine.split('.', 1)[0])
+        return major < 9
+    except Exception:
+        return False
+
+
 def attach(app):
     attach_v9(app)
 
@@ -46,6 +65,16 @@ def attach(app):
             return JSONResponse(
                 {'detail': 'Legacy worker bootstrap disabled. Use the HTTPS local-worker protocol.'},
                 status_code=410,
+                headers={'Cache-Control': 'no-store'},
+            )
+
+        # A V8.x PC may still be running during the V9 rollout. Do not let it
+        # silently consume a V9 job; the cloud worker remains available and the
+        # Studio will ask the user to install agent 2.5.
+        if path == '/api/local-worker/jobs/claim' and request.method == 'POST' and _legacy_local_worker(request):
+            return JSONResponse(
+                {'job': None, 'upgradeRequired': True, 'minimumEngine': '9.0'},
+                status_code=200,
                 headers={'Cache-Control': 'no-store'},
             )
 
