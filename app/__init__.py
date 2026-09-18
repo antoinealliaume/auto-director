@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
 """Auto Director application package bootstrap.
 
-`app.main` imports FastAPI directly. We install a tiny project-local subclass before
-that import so every Studio app instance automatically exposes the same-origin worker
-status route without duplicating the main application module.
+Project-local FastAPI subclass used to attach cross-cutting production features
+before app.main constructs the Studio application.
 """
 import fastapi as _fastapi
 from .worker_status import attach as _attach_worker_status
+from .local_worker_api import attach as _attach_local_worker_api
+from .security import attach as _attach_security
 
 _BaseFastAPI = _fastapi.FastAPI
 
 
 class AutoDirectorFastAPI(_BaseFastAPI):
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _attach_security(self)
         _attach_worker_status(self)
+        _attach_local_worker_api(self)
 
 
 _fastapi.FastAPI = AutoDirectorFastAPI
