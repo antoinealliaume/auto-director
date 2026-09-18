@@ -7,7 +7,6 @@ boundaries and smart-crop coordinates.
 """
 from __future__ import annotations
 
-import math
 import statistics
 
 
@@ -95,7 +94,7 @@ def fit_segment(moment: dict, source: dict, desired: float, remaining: float, st
     candidates=[]
     if strategy in {'clean_story','escalation'} and speech_end is not None:
         se=float(speech_end)
-        if start+.62<=se<=start+min(desired*1.55,remaining):candidates.append((abs(se-target_end)*.72,se,'speech_end'))
+        if start+.62<=se<=start+min(desired*1.55,remaining):candidates.append((abs(se-target_end)*.35,se,'speech_end'))
     beat=nearest_event(beats,target_end,.24)
     if beat is not None and beat>=start+.62:candidates.append((abs(beat-target_end),beat,'beat_end'))
     onset_end=nearest_event(onsets,target_end,.18)
