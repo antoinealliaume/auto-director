@@ -6,13 +6,13 @@ from .config import FFMPEG, run
 
 URL=os.environ.get('LOCAL_VLM_URL','').rstrip('/')
 MODEL=os.environ.get('LOCAL_VLM_MODEL','qwen2.5vl:3b')
-TIMEOUT=float(os.environ.get('LOCAL_VLM_TIMEOUT','180'))
-IMAGE_WIDTH=max(384,min(768,int(os.environ.get('LOCAL_VLM_IMAGE_WIDTH','512'))))
-MAX_IMAGES=max(2,min(6,int(os.environ.get('LOCAL_VLM_MAX_IMAGES','4'))))
-NUM_CTX=max(1024,min(4096,int(os.environ.get('LOCAL_VLM_NUM_CTX','1536'))))
-NUM_PREDICT=max(120,min(600,int(os.environ.get('LOCAL_VLM_NUM_PREDICT','260'))))
-NUM_THREADS=max(1,min(8,int(os.environ.get('LOCAL_VLM_THREADS','4'))))
-MIN_FREE_GB=max(1.0,float(os.environ.get('LOCAL_VLM_MIN_FREE_GB','2.2')))
+TIMEOUT=float(os.environ.get('LOCAL_VLM_TIMEOUT','150'))
+IMAGE_WIDTH=max(384,min(640,int(os.environ.get('LOCAL_VLM_IMAGE_WIDTH','448'))))
+MAX_IMAGES=max(2,min(4,int(os.environ.get('LOCAL_VLM_MAX_IMAGES','3'))))
+NUM_CTX=max(1024,min(2048,int(os.environ.get('LOCAL_VLM_NUM_CTX','1280'))))
+NUM_PREDICT=max(120,min(320,int(os.environ.get('LOCAL_VLM_NUM_PREDICT','200'))))
+NUM_THREADS=max(1,min(4,int(os.environ.get('LOCAL_VLM_THREADS','2'))))
+MIN_FREE_GB=max(2.0,float(os.environ.get('LOCAL_VLM_MIN_FREE_GB','3.0')))
 
 
 def available_memory_gb():
@@ -26,7 +26,8 @@ def available_memory_gb():
         if hasattr(os,'sysconf') and 'SC_AVPHYS_PAGES' in os.sysconf_names:
             return os.sysconf('SC_AVPHYS_PAGES')*os.sysconf('SC_PAGE_SIZE')/(1024**3)
     except Exception:pass
-    return 99.0
+    # Unknown means unsafe. Skip the VLM instead of assuming there is plenty of RAM.
+    return 0.0
 
 
 def enabled():
@@ -51,10 +52,10 @@ def _jsonish(text):
 def _chat(prompt,images):
     free=available_memory_gb()
     if not enabled() or free<MIN_FREE_GB:
-        if enabled() and free<MIN_FREE_GB:print(f'Local AI skipped: only {free:.1f} GB free',flush=True)
+        if enabled():print(f'Local AI skipped: free RAM {free:.1f} GB < {MIN_FREE_GB:.1f} GB',flush=True)
         return None
     imgs=list(images or [])[:MAX_IMAGES]
-    payload={'model':MODEL,'stream':False,'format':'json','keep_alive':'2m','options':{'num_ctx':NUM_CTX,'num_predict':NUM_PREDICT,'num_thread':NUM_THREADS,'temperature':0.25},'messages':[{'role':'user','content':prompt,'images':[base64.b64encode(p.read_bytes()).decode() for p in imgs]}]}
+    payload={'model':MODEL,'stream':False,'format':'json','keep_alive':'90s','options':{'num_ctx':NUM_CTX,'num_predict':NUM_PREDICT,'num_thread':NUM_THREADS,'temperature':0.20},'messages':[{'role':'user','content':prompt,'images':[base64.b64encode(p.read_bytes()).decode() for p in imgs]}]}
     try:
         with httpx.Client(timeout=TIMEOUT) as c:
             r=c.post(URL+'/api/chat',json=payload);r.raise_for_status();data=r.json()
@@ -74,7 +75,7 @@ def refine_plan(project_name,plan,sources,paths,workdir):
             _frame(src,float(seg.get('start',0))+.35,out);frames.append(out);labels.append({'index':i,'assetId':seg.get('assetId'),'start':seg.get('start'),'quality':seg.get('momentScore')})
         except Exception:pass
     if not frames:return plan,{'mode':'heuristic'}
-    prompt=f"Directeur TikTok gaming. Projet: {project_name}. Plan: {json.dumps(plan,ensure_ascii=False)[:4200]}. Indices: {json.dumps(labels)}. Reponds uniquement JSON avec hook, preferredOrder, captions, reason. Privilegie comprehension immediate, tension et payoff."
+    prompt=f"Directeur TikTok gaming. Projet: {project_name}. Plan: {json.dumps(plan,ensure_ascii=False)[:3200]}. Indices: {json.dumps(labels)}. Reponds uniquement JSON avec hook, preferredOrder, captions, reason. Privilegie comprehension immediate, tension et payoff."
     obj=_chat(prompt,frames)
     if not isinstance(obj,dict):return plan,{'mode':'heuristic'}
     refined={**plan,'source':'local-vlm'};segs=list(plan.get('segments',[]));order=obj.get('preferredOrder')
@@ -98,7 +99,8 @@ def critic_video(path,technical_score,plan,workdir):
     if not enabled():return technical_score,{'mode':'technical'}
     duration=sum(float(s.get('duration',0)) for s in plan.get('segments',[])) or 12
     frames=[]
-    for i,t in enumerate([.45,max(.8,duration*.4),max(1.0,duration*.78)]):
+    for i,t in enumerate([.45,max(.8,duration*.45),max(1.0,duration*.80)]):
+        if len(frames)>=MAX_IMAGES:break
         out=workdir/f'vlm_critic_{i}.jpg'
         try:_frame(path,t,out);frames.append(out)
         except Exception:pass
