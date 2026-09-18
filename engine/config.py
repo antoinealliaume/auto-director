@@ -5,10 +5,11 @@ import psycopg, redis
 from imageio_ffmpeg import get_ffmpeg_exe
 from psycopg.types.json import Jsonb
 
-ENGINE_VERSION = '8.5'
+ENGINE_VERSION = '8.6'
 ANALYSIS_VERSION = 4
-DATABASE_URL = os.environ['DATABASE_URL']
-REDIS_URL = os.environ['REDIS_URL']
+REMOTE_WORKER_MODE = os.environ.get('REMOTE_WORKER_MODE','0') == '1'
+DATABASE_URL = os.environ.get('DATABASE_URL','')
+REDIS_URL = os.environ.get('REDIS_URL','')
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY','')
 AI_MODEL = os.environ.get('AI_MODEL','gpt-5.6-luna')
 RENDER_WIDTH = max(480,min(1080,int(os.environ.get('RENDER_WIDTH','720'))))
@@ -19,10 +20,14 @@ MAX_REVISIONS = max(0,min(2,int(os.environ.get('MAX_REVISIONS','1'))))
 MOMENT_SAMPLES = max(4,min(10,int(os.environ.get('MOMENT_SAMPLES','7'))))
 SELF_TEST = os.environ.get('SELF_TEST_ON_START','0') == '1'
 FFMPEG = get_ffmpeg_exe()
-queue = redis.from_url(REDIS_URL,decode_responses=True)
+queue = redis.from_url(REDIS_URL,decode_responses=True) if REDIS_URL else None
+
 
 def db():
+    if not DATABASE_URL:
+        raise RuntimeError('DATABASE_URL unavailable in HTTPS remote-worker mode')
     return psycopg.connect(DATABASE_URL)
+
 
 def run(cmd,timeout=900,check=True):
     p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout)
@@ -30,7 +35,9 @@ def run(cmd,timeout=900,check=True):
         raise RuntimeError((p.stderr or p.stdout or '')[-4000:])
     return p
 
+
 def ensure_schema():
+    if REMOTE_WORKER_MODE:return
     stmts=[
         "alter table projects add column if not exists description text not null default ''",
         "alter table assets add column if not exists metadata jsonb not null default '{}'::jsonb",
@@ -45,11 +52,12 @@ def ensure_schema():
         for s in stmts:
             try:c.execute(s)
             except Exception:pass
-        # Internal validation projects must never leak into the user's Studio.
         try:c.execute("delete from projects where name in ('__SELFTEST__','__SELFTEST_V8__')")
         except Exception:pass
 
+
 def update_job(jid,status,stage,progress,message,score=None,revision=None,strategy=None,brief=None):
+    if REMOTE_WORKER_MODE:return
     sets=['status=%s','stage=%s','progress=%s','message=%s','updated_at=now()']
     vals=[status,stage,int(progress),str(message)[:500]]
     if score is not None:
@@ -66,46 +74,49 @@ def update_job(jid,status,stage,progress,message,score=None,revision=None,strate
         try:c.execute('insert into job_events(job_id,stage,message) values(%s,%s,%s)',(jid,stage,str(message)[:500]))
         except Exception:pass
 
+
 def cancelled(jid):
+    if REMOTE_WORKER_MODE:return False
     with db() as c:
         row=c.execute('select status from jobs where id=%s',(jid,)).fetchone()
     return bool(row and row[0]=='cancelled')
 
+
 def save_asset_analysis(asset_id,metadata,analysis):
+    if REMOTE_WORKER_MODE:return
     meta=dict(metadata or {})
     meta['directorAnalysis']={k:v for k,v in analysis.items() if k not in {'id','name','role'}}
     meta['engineVersion']=ENGINE_VERSION
     with db() as c:
         c.execute('update assets set metadata=%s where id=%s',(Jsonb(meta),uuid.UUID(str(asset_id))))
 
+
 def acquire_job_lock(jid,ttl=3600):
+    if queue is None:return True
     return bool(queue.set('autodirector:lock:'+str(jid),'1',nx=True,ex=ttl))
 
+
 def release_job_lock(jid):
+    if queue is None:return
     try:queue.delete('autodirector:lock:'+str(jid))
     except Exception:pass
 
+
 def _enqueue_if_missing(jid):
+    if queue is None:return False
     jid=str(jid)
     try:
-        # Redis is only a delivery mechanism. PostgreSQL remains the source of truth.
         if queue.lpos('auto_director:jobs',jid) is None:
             queue.lpush('auto_director:jobs',jid)
             return True
     except Exception:
-        # Older Redis implementations may not expose LPOS. Duplicate queue entries are
-        # harmless because the per-job lock keeps processing idempotent.
         try:queue.lpush('auto_director:jobs',jid);return True
         except Exception:pass
     return False
 
-def recover_stale_jobs():
-    """Rebuild the volatile Redis queue from durable PostgreSQL state.
 
-    Render's free Key Value store is intentionally non-persistent, so queued entries
-    can disappear during a Redis restart or deploy. Every worker startup repairs that
-    condition by re-enqueuing durable queued jobs and stale interrupted jobs.
-    """
+def recover_stale_jobs():
+    if REMOTE_WORKER_MODE or queue is None:return
     recovered=[]
     with db() as c:
         stale=c.execute("select id from jobs where status='running' and updated_at < now()-interval '20 minutes' limit 50").fetchall()
