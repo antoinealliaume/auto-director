@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -9,7 +8,9 @@ from fastapi import Header, HTTPException
 from pydantic import BaseModel, Field
 from psycopg.types.json import Jsonb
 
-DATABASE_URL=os.environ.get('DATABASE_URL','')
+from .tiktok_oauth import connection_status
+
+DATABASE_URL=__import__('os').environ.get('DATABASE_URL','')
 
 
 def db(): return psycopg.connect(DATABASE_URL)
@@ -87,9 +88,8 @@ def _clean_tags(tags):
 
 def attach(app):
     async def capabilities(authorization:Optional[str]=Header(None)):
-        require_studio(authorization)
-        oauth=bool(os.environ.get('TIKTOK_CLIENT_KEY','').strip() and os.environ.get('TIKTOK_CLIENT_SECRET','').strip())
-        return {'platform':'tiktok','officialOAuthConfigured':oauth,'autoPublishReady':False,'mode':'official-api-only','note':'OAuth TikTok officiel requis pour publier automatiquement.'}
+        require_studio(authorization);s=connection_status()
+        return {'platform':'tiktok','officialOAuthConfigured':s.get('configured',False),'oauthConnected':s.get('connected',False),'autoPublishReady':s.get('directPostReady',False),'uploadReady':s.get('uploadReady',False),'scopes':s.get('scopes',[]),'mode':'official-api-only','note':'OAuth TikTok officiel et scope video.publish requis pour Direct Post.'}
 
     async def list_publications(authorization:Optional[str]=Header(None)):
         require_studio(authorization);ensure_schema()
@@ -137,14 +137,15 @@ def attach(app):
         require_studio(authorization);ensure_schema()
         try:qid=uuid.UUID(publication_id)
         except Exception:raise HTTPException(400,'Publication invalide')
-        oauth=bool(os.environ.get('TIKTOK_CLIENT_KEY','').strip() and os.environ.get('TIKTOK_CLIENT_SECRET','').strip())
         with db() as c:row=c.execute('select status from publications where id=%s',(qid,)).fetchone()
         if not row:raise HTTPException(404,'Publication introuvable')
-        if not oauth:
-            raise HTTPException(409,'OAuth TikTok officiel non connecté. Le contenu reste prêt dans le Centre de publication.')
-        # Credentials alone are not enough: a user OAuth access token and Content Posting API
-        # authorization are also required. We deliberately do not fake a successful publish.
-        raise HTTPException(409,'Connexion TikTok utilisateur requise avant publication automatique.')
+        s=connection_status()
+        if not s.get('configured'):raise HTTPException(409,'Application TikTok Developer non configurée. Le contenu reste prêt dans la file.')
+        if not s.get('connected'):raise HTTPException(409,'Connecte ton compte TikTok via OAuth officiel avant publication.')
+        if not s.get('directPostReady'):raise HTTPException(409,'Le compte est connecté, mais le scope TikTok video.publish n’est pas autorisé.')
+        # Direct Post additionally requires creator-info driven privacy/interaction choices
+        # and explicit user consent. The API intentionally stays locked until that UI is active.
+        raise HTTPException(409,'TikTok est connecté. Il reste à valider les paramètres Direct Post avant l’envoi automatique.')
 
     app.add_api_route('/api/publications/capabilities',capabilities,methods=['GET'],include_in_schema=False)
     app.add_api_route('/api/publications',list_publications,methods=['GET'],include_in_schema=False)
