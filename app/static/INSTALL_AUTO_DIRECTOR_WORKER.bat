@@ -1,13 +1,13 @@
 @echo off
 setlocal
-title Auto Director - Installation Worker PC
+title Auto Director V9 - Installation Worker PC
 echo.
 echo ==============================================
-echo   AUTO DIRECTOR - INSTALLATION / MISE A JOUR
+echo   AUTO DIRECTOR V9 - WORKER PC 2.5
 echo ==============================================
 echo.
 set "PS1=%TEMP%\Install-AutoDirector.ps1"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache'} 'https://auto-director-web.onrender.com/static/Install-AutoDirector.ps1?v=2.4' -OutFile '%PS1%'"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing -Headers @{'Cache-Control'='no-cache'} 'https://auto-director-web.onrender.com/static/Install-AutoDirector.ps1?v=2.5' -OutFile '%PS1%'"
 if errorlevel 1 (
   echo Echec du telechargement de l'installateur.
   pause
@@ -21,5 +21,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo Mise a jour terminee. Retourne sur Auto Director.
+echo Mise a jour V9 terminee. Retourne sur Auto Director.
 timeout /t 4 /nobreak >nul
