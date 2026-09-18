@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$AgentVersion = '2.2'
+$AgentVersion = '2.3'
 $AllowedOrigin = 'https://auto-director-web.onrender.com'
 $Port = 8765
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
@@ -97,6 +97,8 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   $psi.EnvironmentVariables['WORKER_TOKEN']=[string]$session.workerToken
   $psi.EnvironmentVariables['WORKER_KIND']='local'
   $psi.EnvironmentVariables['REMOTE_WORKER_MODE']='1'
+  $pythonPath=[Environment]::GetEnvironmentVariable('AUTO_DIRECTOR_PYTHON','User')
+  if($pythonPath){$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$pythonPath}
   $proc=[System.Diagnostics.Process]::Start($psi)
   if (-not $proc) { throw 'Impossible de démarrer le worker.' }
   $script:WorkerPid=$proc.Id
