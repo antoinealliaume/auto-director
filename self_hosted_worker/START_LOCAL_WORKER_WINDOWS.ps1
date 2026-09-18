@@ -2,94 +2,68 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-Write-Host '=== Auto Director Local Worker - mode auto prudent ===' -ForegroundColor Cyan
-
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-  throw 'Python 3.12+ est requis.'
-}
+Write-Host '=== Auto Director PC Worker - HTTPS sécurisé ===' -ForegroundColor Cyan
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw 'Python 3.12+ est requis.' }
 
 $EnvFile = Join-Path $PSScriptRoot '.env'
 if (-not (Test-Path $EnvFile)) {
   Copy-Item (Join-Path $PSScriptRoot '.env.example') $EnvFile
-  Write-Host "Configuration locale creee: $EnvFile" -ForegroundColor Green
+  Write-Host "Configuration locale créée: $EnvFile" -ForegroundColor Green
 }
 
-function Import-EnvFile([string]$Path, [bool]$Overwrite=$true) {
+function Import-EnvFile([string]$Path,[bool]$Overwrite=$true) {
   if (-not (Test-Path $Path)) { return }
   Get-Content $Path | ForEach-Object {
     if ($_ -match '^\s*#' -or $_ -notmatch '=') { return }
-    $parts = $_ -split '=', 2
-    $key = $parts[0].Trim()
-    $value = $parts[1].Trim()
-    if ($Overwrite -or -not [Environment]::GetEnvironmentVariable($key, 'Process')) {
-      [Environment]::SetEnvironmentVariable($key, $value, 'Process')
-    }
+    $parts=$_ -split '=',2;$key=$parts[0].Trim();$value=$parts[1].Trim()
+    if ($Overwrite -or -not [Environment]::GetEnvironmentVariable($key,'Process')) { [Environment]::SetEnvironmentVariable($key,$value,'Process') }
   }
 }
-
 Import-EnvFile $EnvFile $true
 
-# Bootstrap securise : par defaut, aucune URL Postgres/Redis n'est stockee sur le PC.
-if (-not $env:DATABASE_URL -or -not $env:REDIS_URL) {
-  $StudioUrl = if ($env:STUDIO_URL) { $env:STUDIO_URL.TrimEnd('/') } else { 'https://auto-director-web.onrender.com' }
-  $StudioPassword = $env:STUDIO_PASSWORD
-  if (-not $StudioPassword) {
-    Write-Host ''
-    Write-Host "Connexion au Studio: $StudioUrl" -ForegroundColor Cyan
-    $Secure = Read-Host 'Mot de passe du Studio' -AsSecureString
-    $Ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
-    try { $StudioPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Ptr) }
-    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Ptr) }
-  }
+$StudioUrl = if ($env:STUDIO_URL) { $env:STUDIO_URL.TrimEnd('/') } else { 'https://auto-director-web.onrender.com' }
+if ($StudioUrl -ne 'https://auto-director-web.onrender.com') { throw 'STUDIO_URL non autorisée.' }
+
+# Manual launch fallback: obtain a worker-scoped token without ever receiving DB/Redis credentials.
+if (-not $env:WORKER_TOKEN) {
+  Write-Host ''
+  Write-Host "Connexion au Studio: $StudioUrl" -ForegroundColor Cyan
+  $Secure=Read-Host 'Mot de passe du Studio' -AsSecureString
+  $Ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
+  try { $StudioPassword=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($Ptr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Ptr) }
   if (-not $StudioPassword) { throw 'Mot de passe du Studio requis.' }
-
-  Write-Host 'Recuperation de la configuration worker par HTTPS...' -ForegroundColor Cyan
   try {
-    $LoginBody = @{ password = $StudioPassword } | ConvertTo-Json -Compress
-    $Login = Invoke-RestMethod -Method Post -Uri "$StudioUrl/api/login" -ContentType 'application/json' -Body $LoginBody -TimeoutSec 20
-    if (-not $Login.token) { throw 'Le Studio n a pas renvoye de session.' }
-    $Headers = @{ Authorization = "Bearer $($Login.token)" }
-    $Bootstrap = Invoke-RestMethod -Method Get -Uri "$StudioUrl/api/worker/bootstrap" -Headers $Headers -TimeoutSec 20
-    if (-not $Bootstrap.databaseUrl -or -not $Bootstrap.redisUrl) { throw 'Configuration worker incomplete.' }
-    $env:DATABASE_URL = $Bootstrap.databaseUrl
-    $env:REDIS_URL = $Bootstrap.redisUrl
-    Write-Host 'Configuration worker recue. Les identifiants restent uniquement en memoire.' -ForegroundColor Green
-  } catch {
-    throw "Bootstrap Studio impossible: $($_.Exception.Message). Si necessaire, configure DATABASE_URL et REDIS_URL manuellement dans self_hosted_worker/.env."
+    $LoginBody=@{password=$StudioPassword}|ConvertTo-Json -Compress
+    $Login=Invoke-RestMethod -Method Post -Uri "$StudioUrl/api/login" -ContentType 'application/json' -Body $LoginBody -TimeoutSec 20
+    if (-not $Login.token) { throw 'Session Studio absente.' }
+    $Headers=@{Authorization="Bearer $($Login.token)"}
+    $Session=Invoke-RestMethod -Method Post -Uri "$StudioUrl/api/local-worker/session" -Headers $Headers -ContentType 'application/json' -Body '{"label":"windows-manual"}' -TimeoutSec 20
+    if (-not $Session.workerToken) { throw 'Jeton worker absent.' }
+    $env:WORKER_TOKEN=[string]$Session.workerToken
   } finally {
-    $StudioPassword = $null
-    $LoginBody = $null
+    $StudioPassword=$null;$LoginBody=$null;$Login=$null
   }
 }
 
-if (-not $env:DATABASE_URL -or -not $env:REDIS_URL) {
-  throw 'Configuration de connexion worker introuvable.'
-}
-
-# Les reglages materiels sont recalcules a chaque demarrage.
-$AutoProfileEnabled = ($env:AUTO_PROFILE -ne '0')
-if ($AutoProfileEnabled) {
-  python (Join-Path $PSScriptRoot 'detect_profile.py')
-  $AutoProfile = Join-Path $PSScriptRoot '.auto_profile.env'
-  Import-EnvFile $AutoProfile $true
-} else {
-  Write-Host 'AUTO_PROFILE=0: reglages materiels manuels actifs.' -ForegroundColor Yellow
-}
-
-if (-not $env:PROFILE_NAME) { $env:PROFILE_NAME='manual-safe' }
-if (-not $env:RENDER_WIDTH) { $env:RENDER_WIDTH='720' }
-if (-not $env:RENDER_HEIGHT) { $env:RENDER_HEIGHT='1280' }
-if (-not $env:RENDER_FPS) { $env:RENDER_FPS='30' }
-if (-not $env:FFMPEG_THREADS) { $env:FFMPEG_THREADS='2' }
-if (-not $env:MOMENT_SAMPLES) { $env:MOMENT_SAMPLES='5' }
-if (-not $env:MAX_REVISIONS) { $env:MAX_REVISIONS='0' }
-
-Write-Host "Profil: $env:PROFILE_NAME" -ForegroundColor Green
-Write-Host "Rendu: $env:RENDER_WIDTH x $env:RENDER_HEIGHT @ $env:RENDER_FPS fps" -ForegroundColor Green
-Write-Host "Charge limitee: FFmpeg=$env:FFMPEG_THREADS threads | analyse=$env:MOMENT_SAMPLES points | revisions=$env:MAX_REVISIONS" -ForegroundColor Green
-
+$env:STUDIO_URL=$StudioUrl
+$env:REMOTE_WORKER_MODE='1'
 $env:WORKER_KIND='local'
 $env:PYTHONUNBUFFERED='1'
+
+# Hardware settings are recalculated on every start.
+$AutoProfileEnabled=($env:AUTO_PROFILE -ne '0')
+if($AutoProfileEnabled){
+  python (Join-Path $PSScriptRoot 'detect_profile.py')
+  Import-EnvFile (Join-Path $PSScriptRoot '.auto_profile.env') $true
+}
+if(-not $env:PROFILE_NAME){$env:PROFILE_NAME='safe-unknown'}
+if(-not $env:RENDER_WIDTH){$env:RENDER_WIDTH='720'}
+if(-not $env:RENDER_HEIGHT){$env:RENDER_HEIGHT='1280'}
+if(-not $env:RENDER_FPS){$env:RENDER_FPS='24'}
+if(-not $env:FFMPEG_THREADS){$env:FFMPEG_THREADS='2'}
+if(-not $env:MOMENT_SAMPLES){$env:MOMENT_SAMPLES='5'}
+if(-not $env:MAX_REVISIONS){$env:MAX_REVISIONS='0'}
+
 $env:OMP_NUM_THREADS=$env:FFMPEG_THREADS
 $env:MKL_NUM_THREADS=$env:FFMPEG_THREADS
 $env:OPENBLAS_NUM_THREADS=$env:FFMPEG_THREADS
@@ -97,70 +71,41 @@ $env:OLLAMA_NUM_PARALLEL='1'
 $env:OLLAMA_MAX_LOADED_MODELS='1'
 $env:OLLAMA_MAX_QUEUE='1'
 $env:OLLAMA_KEEP_ALIVE='90s'
+try{[System.Diagnostics.Process]::GetCurrentProcess().PriorityClass='BelowNormal'}catch{}
 
-try { [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'BelowNormal' } catch {}
+Write-Host "Profil: $env:PROFILE_NAME" -ForegroundColor Green
+Write-Host "Rendu: $env:RENDER_WIDTH x $env:RENDER_HEIGHT @ $env:RENDER_FPS fps" -ForegroundColor Green
+Write-Host "Charge limitée: FFmpeg=$env:FFMPEG_THREADS threads | analyse=$env:MOMENT_SAMPLES | révisions=$env:MAX_REVISIONS" -ForegroundColor Green
+Write-Host 'Transport: HTTPS uniquement · aucun secret PostgreSQL/Redis sur le PC' -ForegroundColor Green
 
-if (-not (Test-Path '.venv-local')) {
-  Write-Host 'Creation de l environnement Python local...' -ForegroundColor Cyan
+if(-not (Test-Path '.venv-local')){
+  Write-Host 'Création de l environnement Python local...' -ForegroundColor Cyan
   python -m venv .venv-local
 }
 & .\.venv-local\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements.txt
-if ($LASTEXITCODE -ne 0) { throw 'Installation Python du worker impossible.' }
+if($LASTEXITCODE -ne 0){throw 'Installation Python du worker impossible.'}
 
-$UseLocalAI = ($env:LOCAL_AI_AUTO_ENABLED -eq '1' -and $env:LOCAL_VLM_URL)
-if ($UseLocalAI) {
-  if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
-    Write-Host 'Ollama absent: le worker continue normalement avec le Director V8 leger.' -ForegroundColor Yellow
-    $env:LOCAL_VLM_URL=''
+$UseLocalAI=($env:LOCAL_AI_AUTO_ENABLED -eq '1' -and $env:LOCAL_VLM_URL)
+if($UseLocalAI){
+  if(-not (Get-Command ollama -ErrorAction SilentlyContinue)){
+    Write-Host 'Ollama absent: fallback Director V8 léger.' -ForegroundColor Yellow;$env:LOCAL_VLM_URL=''
   } else {
-    $OllamaReady = $false
-    try {
-      Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3 | Out-Null
-      $OllamaReady = $true
-    } catch {
-      Write-Host 'Demarrage d Ollama en arriere-plan...' -ForegroundColor Cyan
-      Start-Process -FilePath 'ollama' -ArgumentList 'serve' -WindowStyle Hidden
-      Start-Sleep -Seconds 4
-      try {
-        Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 5 | Out-Null
-        $OllamaReady = $true
-      } catch { $OllamaReady = $false }
+    $ready=$false
+    try{Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3|Out-Null;$ready=$true}catch{
+      try{Start-Process -FilePath 'ollama' -ArgumentList 'serve' -WindowStyle Hidden;Start-Sleep -Seconds 4;Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 5|Out-Null;$ready=$true}catch{$ready=$false}
     }
-
-    if ($OllamaReady) {
-      $model = if ($env:LOCAL_VLM_MODEL) { $env:LOCAL_VLM_MODEL } else { 'qwen2.5vl:3b' }
-      $Installed = $false
-      try {
-        $list = ollama list | Out-String
-        if ($list -match [regex]::Escape($model)) { $Installed = $true }
-      } catch {}
-      if (-not $Installed) {
-        Write-Host "Petit modele local non present. Installation unique: $model" -ForegroundColor Cyan
-        try { ollama pull $model } catch { $env:LOCAL_VLM_URL='' }
-      }
-      if ($env:LOCAL_VLM_URL) {
-        Write-Host "IA locale activee en mode prudent: $model, 1 requete a la fois." -ForegroundColor Cyan
-      } else {
-        Write-Host 'Modele indisponible: fallback V8 leger.' -ForegroundColor Yellow
-      }
-    } else {
-      $env:LOCAL_VLM_URL=''
-      Write-Host 'Ollama indisponible: fallback V8 leger.' -ForegroundColor Yellow
-    }
+    if($ready){
+      $model=if($env:LOCAL_VLM_MODEL){$env:LOCAL_VLM_MODEL}else{'qwen2.5vl:3b'}
+      $installed=$false;try{$list=ollama list|Out-String;if($list -match [regex]::Escape($model)){$installed=$true}}catch{}
+      if(-not $installed){try{ollama pull $model}catch{$env:LOCAL_VLM_URL=''}}
+    } else {$env:LOCAL_VLM_URL=''}
   }
-} else {
-  $env:LOCAL_VLM_URL=''
-  Write-Host 'IA visuelle lourde desactivee automatiquement sur cette machine.' -ForegroundColor Yellow
-}
+} else {$env:LOCAL_VLM_URL=''}
 
-Write-Host ''
-Write-Host 'Verification avant demarrage...' -ForegroundColor Cyan
+Write-Host 'Diagnostic sécurisé...' -ForegroundColor Cyan
 & .\.venv-local\Scripts\python.exe (Join-Path $PSScriptRoot 'doctor.py')
-if ($LASTEXITCODE -ne 0) {
-  throw 'Le diagnostic a detecte un probleme critique. Corrige le point ERREUR ci-dessus puis relance.'
-}
+if($LASTEXITCODE -ne 0){throw 'Le diagnostic a détecté un problème critique.'}
 
 Write-Host ''
-Write-Host 'Worker local lance en priorite basse. Il devient prioritaire sur Render.' -ForegroundColor Green
-Write-Host 'Si tu fermes cette fenetre, Render reprend automatiquement les jobs.' -ForegroundColor DarkGray
-& .\.venv-local\Scripts\python.exe worker.py
+Write-Host 'Worker PC démarré. Il devient prioritaire sur Render quand son heartbeat HTTPS est reçu.' -ForegroundColor Green
+& .\.venv-local\Scripts\python.exe (Join-Path $PSScriptRoot 'http_worker.py')
