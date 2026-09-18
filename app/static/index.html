@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Auto Director Studio</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/worker-status.css" />
 </head>
 <body>
 <div id="toast" class="toast"></div>
@@ -22,7 +23,7 @@
 
 <div id="studio" class="layout hidden">
   <aside class="sidebar">
-    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V7</span></div></div>
+    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V8.4</span></div></div>
     <nav id="nav">
       <button data-tab="studio" class="active">Studio</button>
       <button data-tab="pipeline">Pipeline <span id="navJobs" class="counter">0</span></button>
@@ -46,7 +47,20 @@
     <section id="tab-studio" class="tab active">
       <div class="hero">
         <div><span class="eyebrow purple">WORKFLOW</span><h1>De tes rushs à une vidéo TikTok.</h1><p>Crée un projet, importe tes clips, laisse le Director choisir les moments et suis le rendu en direct.</p></div>
-        <div class="health-grid"><div><b id="statProjects">0</b><span>Projets</span></div><div><b id="statSources">0</b><span>Rushs</span></div><div><b id="statRenders">0</b><span>Rendus</span></div><div><b id="statAi">—</b><span>Moteur IA</span></div></div>
+        <div class="health-grid"><div><b id="statProjects">0</b><span>Projets</span></div><div><b id="statSources">0</b><span>Rushs</span></div><div><b id="statRenders">0</b><span>Rendus</span></div><div><b id="statAi">—</b><span>Moteur IA</span></div><div><b id="statWorker">—</b><span>Worker actif</span></div></div>
+      </div>
+
+      <div id="workerBanner" class="worker-banner">
+        <div class="worker-main">
+          <i id="workerStatusLed" class="worker-led"></i>
+          <div class="worker-copy"><b id="workerStatusLabel">Détection du worker…</b><span id="workerStatusDetail">Vérification du PC local et du fallback Render.</span></div>
+        </div>
+        <div class="worker-pills">
+          <span id="workerProfilePill" class="worker-pill">Profil —</span>
+          <span id="workerRenderPill" class="worker-pill">Rendu —</span>
+          <span id="workerAiPill" class="worker-pill">IA —</span>
+          <span id="workerQueuePill" class="worker-pill">File —</span>
+        </div>
       </div>
 
       <div class="step-grid">
@@ -93,5 +107,6 @@
   </main>
 </div>
 <script src="/static/app.js"></script>
+<script src="/static/worker-status.js"></script>
 </body>
 </html>
