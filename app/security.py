@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import hashlib
 import os
 
 import redis
@@ -7,10 +8,29 @@ from fastapi.responses import JSONResponse
 REDIS_URL = os.environ.get('REDIS_URL', '')
 LOGIN_LIMIT = max(5, min(30, int(os.environ.get('LOGIN_LIMIT', '10'))))
 LOGIN_WINDOW = max(60, min(3600, int(os.environ.get('LOGIN_WINDOW_SECONDS', '600'))))
+GLOBAL_LOGIN_LIMIT = max(50, min(500, int(os.environ.get('GLOBAL_LOGIN_LIMIT', '120'))))
 
 
 def _queue():
     return redis.from_url(REDIS_URL, decode_responses=True) if REDIS_URL else None
+
+
+def _source_id(request):
+    forwarded = (request.headers.get('x-forwarded-for') or '').split(',', 1)[0].strip()
+    host = forwarded or (request.client.host if request.client else 'unknown')
+    return hashlib.sha256(host.encode()).hexdigest()[:20]
+
+
+def _studio_authorized(request):
+    auth = request.headers.get('authorization') or ''
+    token = auth[7:] if auth.startswith('Bearer ') else ''
+    if not token:
+        return False
+    try:
+        from .main import verify_token
+        return bool(verify_token(token))
+    except Exception:
+        return False
 
 
 def attach(app):
@@ -18,8 +38,7 @@ def attach(app):
     async def security_middleware(request, call_next):
         path = request.url.path
 
-        # Legacy bootstrap used to expose cloud database/queue connection strings.
-        # It is intentionally disabled: local workers now use the HTTPS worker API.
+        # Never expose cloud connection strings to a client-side worker.
         if path == '/api/worker/bootstrap':
             return JSONResponse(
                 {'detail': 'Legacy worker bootstrap disabled. Use the HTTPS local-worker protocol.'},
@@ -27,12 +46,20 @@ def attach(app):
                 headers={'Cache-Control': 'no-store'},
             )
 
+        # The deep health report can contain infrastructure error details.
+        if path == '/health/deep' and not _studio_authorized(request):
+            return JSONResponse({'detail': 'Authentification requise'}, status_code=401, headers={'Cache-Control': 'no-store'})
+
         q = None
-        login_key = 'autodirector:security:login_failures'
+        source_key = global_key = None
         if path == '/api/login' and request.method == 'POST':
             try:
                 q = _queue()
-                if q and int(q.get(login_key) or 0) >= LOGIN_LIMIT:
+                source_key = 'autodirector:security:login_failures:' + _source_id(request)
+                global_key = 'autodirector:security:login_failures:global'
+                source_hits = int(q.get(source_key) or 0) if q else 0
+                global_hits = int(q.get(global_key) or 0) if q else 0
+                if q and (source_hits >= LOGIN_LIMIT or global_hits >= GLOBAL_LOGIN_LIMIT):
                     return JSONResponse(
                         {'detail': 'Trop de tentatives. Réessaie dans quelques minutes.'},
                         status_code=429,
@@ -43,14 +70,15 @@ def attach(app):
 
         response = await call_next(request)
 
-        if path == '/api/login' and request.method == 'POST' and q:
+        if path == '/api/login' and request.method == 'POST' and q and source_key and global_key:
             try:
                 if response.status_code == 401:
-                    n = q.incr(login_key)
-                    if n == 1:
-                        q.expire(login_key, LOGIN_WINDOW)
+                    for key in (source_key, global_key):
+                        n = q.incr(key)
+                        if n == 1:
+                            q.expire(key, LOGIN_WINDOW)
                 elif 200 <= response.status_code < 300:
-                    q.delete(login_key)
+                    q.delete(source_key)
             except Exception:
                 pass
 
@@ -69,6 +97,6 @@ def attach(app):
             "connect-src 'self' http://127.0.0.1:8765; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
         )
-        if path.startswith('/api/'):
+        if path.startswith('/api/') or path == '/health/deep':
             response.headers['Cache-Control'] = 'no-store, max-age=0'
         return response
