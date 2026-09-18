@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Auto Director Studio</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="/static/worker-status.css" />
+  <link rel="stylesheet" href="/static/worker-status.css?v=8.5.1" />
 </head>
 <body>
 <div id="toast" class="toast"></div>
@@ -23,7 +23,7 @@
 
 <div id="studio" class="layout hidden">
   <aside class="sidebar">
-    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V8.4</span></div></div>
+    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V8.5</span></div></div>
     <nav id="nav">
       <button data-tab="studio" class="active">Studio</button>
       <button data-tab="pipeline">Pipeline <span id="navJobs" class="counter">0</span></button>
@@ -60,6 +60,10 @@
           <span id="workerRenderPill" class="worker-pill">Rendu —</span>
           <span id="workerAiPill" class="worker-pill">IA —</span>
           <span id="workerQueuePill" class="worker-pill">File —</span>
+        </div>
+        <div class="worker-controls">
+          <button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button>
+          <span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span>
         </div>
       </div>
 
@@ -107,6 +111,6 @@
   </main>
 </div>
 <script src="/static/app.js"></script>
-<script src="/static/worker-status.js"></script>
+<script src="/static/worker-status.js?v=8.5.1"></script>
 </body>
 </html>
