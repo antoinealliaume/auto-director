@@ -21,23 +21,16 @@ def available_memory_gb():
             class M(ctypes.Structure):
                 _fields_=[('dwLength',ctypes.c_ulong),('dwMemoryLoad',ctypes.c_ulong),('ullTotalPhys',ctypes.c_ulonglong),('ullAvailPhys',ctypes.c_ulonglong),('ullTotalPageFile',ctypes.c_ulonglong),('ullAvailPageFile',ctypes.c_ulonglong),('ullTotalVirtual',ctypes.c_ulonglong),('ullAvailVirtual',ctypes.c_ulonglong),('sullAvailExtendedVirtual',ctypes.c_ulonglong)]
             s=M();s.dwLength=ctypes.sizeof(M)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s)):
-                return s.ullAvailPhys/(1024**3)
-        if hasattr(os,'sysconf') and 'SC_AVPHYS_PAGES' in os.sysconf_names:
-            return os.sysconf('SC_AVPHYS_PAGES')*os.sysconf('SC_PAGE_SIZE')/(1024**3)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s)):return s.ullAvailPhys/(1024**3)
+        if hasattr(os,'sysconf') and 'SC_AVPHYS_PAGES' in os.sysconf_names:return os.sysconf('SC_AVPHYS_PAGES')*os.sysconf('SC_PAGE_SIZE')/(1024**3)
     except Exception:pass
-    # Unknown means unsafe. Skip the VLM instead of assuming there is plenty of RAM.
     return 0.0
 
 
-def enabled():
-    return bool(URL)
-
+def enabled():return bool(URL)
 
 def _frame(src:Path,at:float,out:Path):
-    run([FFMPEG,'-y','-ss',str(max(0,at)),'-i',str(src),'-frames:v','1','-vf',f'scale={IMAGE_WIDTH}:-2',str(out)],90)
-    return out
-
+    run([FFMPEG,'-y','-ss',str(max(0,at)),'-i',str(src),'-frames:v','1','-vf',f'scale={IMAGE_WIDTH}:-2',str(out)],90);return out
 
 def _jsonish(text):
     if not text:return None
@@ -48,7 +41,6 @@ def _jsonish(text):
     try:return json.loads(m.group(0))
     except Exception:return None
 
-
 def _chat(prompt,images):
     free=available_memory_gb()
     if not enabled() or free<MIN_FREE_GB:
@@ -57,11 +49,19 @@ def _chat(prompt,images):
     imgs=list(images or [])[:MAX_IMAGES]
     payload={'model':MODEL,'stream':False,'format':'json','keep_alive':'90s','options':{'num_ctx':NUM_CTX,'num_predict':NUM_PREDICT,'num_thread':NUM_THREADS,'temperature':0.20},'messages':[{'role':'user','content':prompt,'images':[base64.b64encode(p.read_bytes()).decode() for p in imgs]}]}
     try:
-        with httpx.Client(timeout=TIMEOUT) as c:
-            r=c.post(URL+'/api/chat',json=payload);r.raise_for_status();data=r.json()
+        with httpx.Client(timeout=TIMEOUT) as c:r=c.post(URL+'/api/chat',json=payload);r.raise_for_status();data=r.json()
         return _jsonish(((data.get('message') or {}).get('content')) or '')
     except Exception as e:
         print('Local AI fallback',type(e).__name__,str(e)[:160],flush=True);return None
+
+
+def _speech_context(sources):
+    out=[]
+    for s in sources or []:
+        text=str(s.get('spokenText') or (s.get('transcript') or {}).get('text') or '').strip()
+        if text:out.append({'assetId':s.get('id'),'speech':text[:420]})
+        if len(out)>=5:break
+    return out
 
 
 def refine_plan(project_name,plan,sources,paths,workdir):
@@ -71,11 +71,14 @@ def refine_plan(project_name,plan,sources,paths,workdir):
         src=paths.get(str(seg.get('assetId')))
         if not src:continue
         out=workdir/f'vlm_plan_{i}.jpg'
-        try:
-            _frame(src,float(seg.get('start',0))+.35,out);frames.append(out);labels.append({'index':i,'assetId':seg.get('assetId'),'start':seg.get('start'),'quality':seg.get('momentScore')})
+        try:_frame(src,float(seg.get('start',0))+.35,out);frames.append(out);labels.append({'index':i,'assetId':seg.get('assetId'),'start':seg.get('start'),'quality':seg.get('momentScore')})
         except Exception:pass
     if not frames:return plan,{'mode':'heuristic'}
-    prompt=f"Directeur TikTok gaming. Projet: {project_name}. Plan: {json.dumps(plan,ensure_ascii=False)[:3200]}. Indices: {json.dumps(labels)}. Reponds uniquement JSON avec hook, preferredOrder, captions, reason. Privilegie comprehension immediate, tension et payoff."
+    speech=_speech_context(sources)
+    prompt=(f"Directeur TikTok gaming. Projet: {project_name}. Plan: {json.dumps(plan,ensure_ascii=False)[:2800]}. "
+            f"Indices images: {json.dumps(labels,ensure_ascii=False)}. Paroles transcrites locales: {json.dumps(speech,ensure_ascii=False)[:1600]}. "
+            "Utilise les paroles seulement si elles apportent du contexte; ne les invente jamais. "
+            "Reponds uniquement JSON avec hook, preferredOrder, captions, reason. Privilegie comprehension immediate, tension, payoff et captions tres courtes.")
     obj=_chat(prompt,frames)
     if not isinstance(obj,dict):return plan,{'mode':'heuristic'}
     refined={**plan,'source':'local-vlm'};segs=list(plan.get('segments',[]));order=obj.get('preferredOrder')
@@ -92,13 +95,12 @@ def refine_plan(project_name,plan,sources,paths,workdir):
     for i,s in enumerate(refined['segments']):
         cap=str(caps.get(str(i),'')).strip()
         if 1<=len(cap)<=80:s['caption']=cap
-    return refined,{'mode':'local-vlm','model':MODEL,'reason':str(obj.get('reason',''))[:260]}
+    return refined,{'mode':'local-vlm','model':MODEL,'reason':str(obj.get('reason',''))[:260],'speechContext':bool(speech)}
 
 
 def critic_video(path,technical_score,plan,workdir):
     if not enabled():return technical_score,{'mode':'technical'}
-    duration=sum(float(s.get('duration',0)) for s in plan.get('segments',[])) or 12
-    frames=[]
+    duration=sum(float(s.get('duration',0)) for s in plan.get('segments',[])) or 12;frames=[]
     for i,t in enumerate([.45,max(.8,duration*.45),max(1.0,duration*.80)]):
         if len(frames)>=MAX_IMAGES:break
         out=workdir/f'vlm_critic_{i}.jpg'
