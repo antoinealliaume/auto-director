@@ -11,9 +11,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 $EnvFile = Join-Path $PSScriptRoot '.env'
 if (-not (Test-Path $EnvFile)) {
   Copy-Item (Join-Path $PSScriptRoot '.env.example') $EnvFile
-  Write-Host "Fichier cree: $EnvFile" -ForegroundColor Yellow
-  Write-Host 'Renseigne seulement DATABASE_URL et REDIS_URL externes de Render, puis relance.' -ForegroundColor Yellow
-  exit 1
+  Write-Host "Configuration locale creee: $EnvFile" -ForegroundColor Green
 }
 
 function Import-EnvFile([string]$Path, [bool]$Overwrite=$true) {
@@ -29,8 +27,44 @@ function Import-EnvFile([string]$Path, [bool]$Overwrite=$true) {
   }
 }
 
-# Les URLs de connexion viennent du fichier prive .env.
 Import-EnvFile $EnvFile $true
+
+# Bootstrap securise : par defaut, aucune URL Postgres/Redis n'est stockee sur le PC.
+if (-not $env:DATABASE_URL -or -not $env:REDIS_URL) {
+  $StudioUrl = if ($env:STUDIO_URL) { $env:STUDIO_URL.TrimEnd('/') } else { 'https://auto-director-web.onrender.com' }
+  $StudioPassword = $env:STUDIO_PASSWORD
+  if (-not $StudioPassword) {
+    Write-Host ''
+    Write-Host "Connexion au Studio: $StudioUrl" -ForegroundColor Cyan
+    $Secure = Read-Host 'Mot de passe du Studio' -AsSecureString
+    $Ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
+    try { $StudioPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Ptr) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Ptr) }
+  }
+  if (-not $StudioPassword) { throw 'Mot de passe du Studio requis.' }
+
+  Write-Host 'Recuperation de la configuration worker par HTTPS...' -ForegroundColor Cyan
+  try {
+    $LoginBody = @{ password = $StudioPassword } | ConvertTo-Json -Compress
+    $Login = Invoke-RestMethod -Method Post -Uri "$StudioUrl/api/login" -ContentType 'application/json' -Body $LoginBody -TimeoutSec 20
+    if (-not $Login.token) { throw 'Le Studio n a pas renvoye de session.' }
+    $Headers = @{ Authorization = "Bearer $($Login.token)" }
+    $Bootstrap = Invoke-RestMethod -Method Get -Uri "$StudioUrl/api/worker/bootstrap" -Headers $Headers -TimeoutSec 20
+    if (-not $Bootstrap.databaseUrl -or -not $Bootstrap.redisUrl) { throw 'Configuration worker incomplete.' }
+    $env:DATABASE_URL = $Bootstrap.databaseUrl
+    $env:REDIS_URL = $Bootstrap.redisUrl
+    Write-Host 'Configuration worker recue. Les identifiants restent uniquement en memoire.' -ForegroundColor Green
+  } catch {
+    throw "Bootstrap Studio impossible: $($_.Exception.Message). Si necessaire, configure DATABASE_URL et REDIS_URL manuellement dans self_hosted_worker/.env."
+  } finally {
+    $StudioPassword = $null
+    $LoginBody = $null
+  }
+}
+
+if (-not $env:DATABASE_URL -or -not $env:REDIS_URL) {
+  throw 'Configuration de connexion worker introuvable.'
+}
 
 # Les reglages materiels sont recalcules a chaque demarrage.
 $AutoProfileEnabled = ($env:AUTO_PROFILE -ne '0')
@@ -40,10 +74,6 @@ if ($AutoProfileEnabled) {
   Import-EnvFile $AutoProfile $true
 } else {
   Write-Host 'AUTO_PROFILE=0: reglages materiels manuels actifs.' -ForegroundColor Yellow
-}
-
-if (-not $env:DATABASE_URL -or -not $env:REDIS_URL -or $env:DATABASE_URL -like '*USER:PASSWORD*' -or $env:REDIS_URL -like '*PASSWORD*') {
-  throw 'Configure DATABASE_URL et REDIS_URL dans self_hosted_worker/.env.'
 }
 
 if (-not $env:PROFILE_NAME) { $env:PROFILE_NAME='manual-safe' }
@@ -75,6 +105,7 @@ if (-not (Test-Path '.venv-local')) {
   python -m venv .venv-local
 }
 & .\.venv-local\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements.txt
+if ($LASTEXITCODE -ne 0) { throw 'Installation Python du worker impossible.' }
 
 $UseLocalAI = ($env:LOCAL_AI_AUTO_ENABLED -eq '1' -and $env:LOCAL_VLM_URL)
 if ($UseLocalAI) {
