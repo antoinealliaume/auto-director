@@ -28,4 +28,9 @@
       }catch(e){console.warn('Media ticket failed',e)}
     });
   };
+
+  // Keep the HTML shell small: feature modules can evolve independently.
+  if(!document.querySelector('script[data-auto-director-publication]')){
+    const s=document.createElement('script');s.src='/static/publication.js?v=8.6';s.dataset.autoDirectorPublication='1';document.body.appendChild(s);
+  }
 })();
