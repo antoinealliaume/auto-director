@@ -25,6 +25,13 @@ class V9JobIn(BaseModel):
 
 
 def attach(app):
+    # Keep the runtime metadata coherent without duplicating the full legacy API.
+    try:
+        from . import main as main_module
+        main_module.APP_VERSION='9.0';main_module.ENGINE_VERSION='9.0';app.version='9.0'
+    except Exception:
+        pass
+
     # Replace only the legacy POST /api/jobs route. Existing callers keep the
     # same URL while V9 settings stop being silently discarded.
     app.router.routes[:]=[
