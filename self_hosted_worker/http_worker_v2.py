@@ -14,9 +14,15 @@ _original_refine=base.refine_plan
 
 
 def analyze_with_intelligence(path,asset_id,name,role,metadata=None):
-    analysis,changed=_original_analyze(path,asset_id,name,role,metadata)
+    # A cloud analysis is deliberately lightweight and can already be cached at
+    # ANALYSIS_VERSION=5. On a capable PC, recompute source visuals so OpenCV
+    # smart-focus and PySceneDetect are not silently skipped by that cache.
+    effective_metadata=metadata
+    if role!='reference' and quality_enabled() and isinstance(metadata,dict):
+        effective_metadata=dict(metadata);effective_metadata.pop('directorAnalysis',None)
+    analysis,changed=_original_analyze(path,asset_id,name,role,effective_metadata)
     if role!='reference' and quality_enabled():
-        analysis=enrich_quality(path,analysis)
+        analysis=enrich_quality(path,analysis);analysis['localQualityVersion']=1
         qa=analysis.get('qualityAudio') or {}
         if qa.get('enabled'):
             print(f"Quality audio: {name} · {qa.get('tempoBpm',0)} BPM · {qa.get('onsetCount',0)} impacts",flush=True)
