@@ -2,7 +2,7 @@
 import asyncio, re
 from pathlib import Path
 from edge_tts import Communicate
-from .config import FFMPEG, RENDER_WIDTH as W, RENDER_HEIGHT as H, run
+from .config import FFMPEG, FFMPEG_THREADS, RENDER_WIDTH as W, RENDER_HEIGHT as H, run
 from .analysis import probe, black_ratio, freeze_ratio
 
 def has_drawtext():
@@ -31,10 +31,11 @@ def make_segment(src,out,start,duration,zoom,hook='',caption=''):
         caption_file=out.with_suffix('.caption.txt');caption_file.write_text(safe_text(caption),encoding='utf-8')
     vf=video_filter(zoom,hook_file,caption_file);cmd=[FFMPEG,'-y','-ss',str(start),'-i',str(src)]
     base=['-t',str(duration),'-vf',vf]
+    video_opts=['-c:v','libx264','-preset','veryfast','-crf','21','-threads',str(FFMPEG_THREADS),'-pix_fmt','yuv420p']
     if has_audio:
-        cmd += base+['-map','0:v:0','-map','0:a:0','-c:v','libx264','-preset','veryfast','-crf','21','-pix_fmt','yuv420p','-c:a','aac','-b:a','144k','-ar','44100','-ac','2','-shortest',str(out)]
+        cmd += base+['-map','0:v:0','-map','0:a:0']+video_opts+['-c:a','aac','-b:a','144k','-ar','44100','-ac','2','-shortest',str(out)]
     else:
-        cmd += ['-f','lavfi','-t',str(duration),'-i','anullsrc=channel_layout=stereo:sample_rate=44100']+base+['-map','0:v:0','-map','1:a:0','-c:v','libx264','-preset','veryfast','-crf','21','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-ar','44100','-ac','2','-shortest',str(out)]
+        cmd += ['-f','lavfi','-t',str(duration),'-i','anullsrc=channel_layout=stereo:sample_rate=44100']+base+['-map','0:v:0','-map','1:a:0']+video_opts+['-c:a','aac','-b:a','128k','-ar','44100','-ac','2','-shortest',str(out)]
     run(cmd,700)
 
 def render_plan(work,plan,paths,out,captions=True,voiceover='auto'):
@@ -45,7 +46,7 @@ def render_plan(work,plan,paths,out,captions=True,voiceover='auto'):
         segments.append(seg)
     listing=work/f'{out.stem}.txt';listing.write_text('\n'.join([f"file '{x.as_posix()}'" for x in segments]),encoding='utf-8')
     base=work/f'{out.stem}_base.mp4'
-    run([FFMPEG,'-y','-f','concat','-safe','0','-i',str(listing),'-c:v','libx264','-preset','veryfast','-crf','21','-c:a','aac','-b:a','144k','-movflags','+faststart',str(base)],1000)
+    run([FFMPEG,'-y','-f','concat','-safe','0','-i',str(listing),'-c:v','libx264','-preset','veryfast','-crf','21','-threads',str(FFMPEG_THREADS),'-c:a','aac','-b:a','144k','-movflags','+faststart',str(base)],1000)
     if voiceover!='off':
         voice=work/f'{out.stem}_voice.mp3'
         try:
