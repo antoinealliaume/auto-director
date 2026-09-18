@@ -4,6 +4,7 @@ from pathlib import Path
 import psycopg, redis
 from imageio_ffmpeg import get_ffmpeg_exe
 from psycopg.types.json import Jsonb
+from storage_schema import ensure_storage_schema
 
 ENGINE_VERSION = '8.6'
 ANALYSIS_VERSION = 4
@@ -52,6 +53,8 @@ def ensure_schema():
         for s in stmts:
             try:c.execute(s)
             except Exception:pass
+        try:ensure_storage_schema(c)
+        except Exception:pass
         try:c.execute("delete from projects where name in ('__SELFTEST__','__SELFTEST_V8__')")
         except Exception:pass
 
