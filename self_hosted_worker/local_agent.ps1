@@ -1,11 +1,12 @@
 $ErrorActionPreference = 'Stop'
 
-$AgentVersion = '2.1'
+$AgentVersion = '2.2'
 $AllowedOrigin = 'https://auto-director-web.onrender.com'
 $Port = 8765
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
 $Launcher = Join-Path $RepoRoot 'self_hosted_worker\START_LOCAL_WORKER_WINDOWS.ps1'
+$Runner = Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
 $LogFile = Join-Path $InstallRoot 'worker.log'
 $script:WorkerPid = $null
 $script:LastExitCode = $null
@@ -14,8 +15,8 @@ $script:LastStartError = ''
 function Get-LogTail {
   try {
     if (-not (Test-Path $LogFile)) { return '' }
-    $text = ((Get-Content $LogFile -Tail 18 -ErrorAction Stop) -join "`n")
-    if ($text.Length -gt 2000) { $text = $text.Substring($text.Length - 2000) }
+    $text = ((Get-Content $LogFile -Encoding UTF8 -Tail 24 -ErrorAction Stop) -join "`n")
+    if ($text.Length -gt 3000) { $text = $text.Substring($text.Length - 3000) }
     return $text
   } catch { return '' }
 }
@@ -73,6 +74,7 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   if (Worker-IsRunning) { return @{ alreadyRunning=$true; pid=$script:WorkerPid } }
   $script:LastStartError='';$script:LastExitCode=$null
   if (-not (Test-Path $Launcher)) { throw 'Worker local non installé. Réinstalle Auto Director Local Agent.' }
+  if (-not (Test-Path $Runner)) { throw 'Runner local manquant. Mets à jour Auto Director Local Agent.' }
   $uri=[Uri]$studioUrl
   if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'auto-director-web.onrender.com') { throw 'Studio non autorisé.' }
   if (-not $studioToken -or $studioToken.Length -lt 20) { throw 'Session Studio manquante.' }
@@ -83,14 +85,11 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   if (-not $session.workerToken) { throw 'Le Studio n a pas fourni de jeton worker.' }
 
   New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-  Set-Content -Path $LogFile -Value ("=== Auto Director worker start " + (Get-Date -Format o) + " ===") -Encoding UTF8
   Send-StartingHeartbeat $studioUrl ([string]$session.workerToken)
 
-  $launcherEsc = $Launcher.Replace("'","''")
-  $logEsc = $LogFile.Replace("'","''")
   $psi=New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName='powershell.exe'
-  $psi.Arguments="-NoProfile -ExecutionPolicy Bypass -Command `"& '$launcherEsc' *>> '$logEsc'`""
+  $psi.Arguments="-NoProfile -ExecutionPolicy Bypass -File `"$Runner`" -Launcher `"$Launcher`" -LogFile `"$LogFile`""
   $psi.WorkingDirectory=$RepoRoot
   $psi.UseShellExecute=$false
   $psi.CreateNoWindow=$true
@@ -101,7 +100,7 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   $proc=[System.Diagnostics.Process]::Start($psi)
   if (-not $proc) { throw 'Impossible de démarrer le worker.' }
   $script:WorkerPid=$proc.Id
-  Start-Sleep -Milliseconds 1400
+  Start-Sleep -Milliseconds 1700
   if (-not (Worker-IsRunning)) {
     $tail=Get-LogTail
     $script:LastStartError=if($tail){$tail}else{'Le processus worker s est arrêté immédiatement.'}
