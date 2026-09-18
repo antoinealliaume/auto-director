@@ -10,8 +10,8 @@ from psycopg.types.json import Jsonb
 
 from storage_schema import ensure_storage_schema
 
-ENGINE_VERSION = '9.0'
-ANALYSIS_VERSION = 4
+ENGINE_VERSION = '9.1'
+ANALYSIS_VERSION = 5
 REMOTE_WORKER_MODE = os.environ.get('REMOTE_WORKER_MODE','0') == '1'
 DATABASE_URL = os.environ.get('DATABASE_URL','')
 REDIS_URL = os.environ.get('REDIS_URL','')
@@ -19,8 +19,11 @@ RENDER_WIDTH = max(480,min(1080,int(os.environ.get('RENDER_WIDTH','720'))))
 RENDER_HEIGHT = max(854,min(1920,int(os.environ.get('RENDER_HEIGHT','1280'))))
 RENDER_FPS = max(24,min(30,int(os.environ.get('RENDER_FPS','30'))))
 FFMPEG_THREADS = max(1,min(6,int(os.environ.get('FFMPEG_THREADS','2'))))
+RENDER_CRF = max(18,min(24,int(os.environ.get('RENDER_CRF','20'))))
+RENDER_PRESET = os.environ.get('RENDER_PRESET','veryfast').strip().lower()
+if RENDER_PRESET not in {'ultrafast','superfast','veryfast','faster','fast','medium'}:RENDER_PRESET='veryfast'
 MAX_REVISIONS = max(0,min(2,int(os.environ.get('MAX_REVISIONS','1'))))
-MOMENT_SAMPLES = max(4,min(10,int(os.environ.get('MOMENT_SAMPLES','7'))))
+MOMENT_SAMPLES = max(4,min(12,int(os.environ.get('MOMENT_SAMPLES','7'))))
 SELF_TEST = os.environ.get('SELF_TEST_ON_START','0') == '1'
 FFMPEG = get_ffmpeg_exe()
 queue = redis.from_url(REDIS_URL,decode_responses=True) if REDIS_URL else None
@@ -28,15 +31,13 @@ QUEUE_KEY = 'auto_director:jobs'
 
 
 def db():
-    if not DATABASE_URL:
-        raise RuntimeError('DATABASE_URL unavailable in HTTPS remote-worker mode')
+    if not DATABASE_URL:raise RuntimeError('DATABASE_URL unavailable in HTTPS remote-worker mode')
     return psycopg.connect(DATABASE_URL)
 
 
 def run(cmd,timeout=900,check=True):
     p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout)
-    if check and p.returncode:
-        raise RuntimeError((p.stderr or p.stdout or '')[-4000:])
+    if check and p.returncode:raise RuntimeError((p.stderr or p.stdout or '')[-4000:])
     return p
 
 
