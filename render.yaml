@@ -24,13 +24,14 @@ services:
       - key: MAX_UPLOAD_MB
         value: '60'
 
-  - type: worker
+  - type: web
     name: auto-director-worker
     runtime: python
     region: frankfurt
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python worker.py
+    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
