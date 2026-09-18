@@ -7,7 +7,10 @@ from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGH
 from .job import process_job
 
 WORKER_KIND=os.environ.get('WORKER_KIND','cloud').strip().lower()
-LOCAL_HEARTBEAT_KEY='autodirector:worker:local:heartbeat'
+if WORKER_KIND not in {'local','cloud'}:WORKER_KIND='cloud'
+HEARTBEAT_PREFIX='autodirector:worker:'
+LOCAL_HEARTBEAT_KEY=HEARTBEAT_PREFIX+'local:heartbeat'
+CLOUD_HEARTBEAT_KEY=HEARTBEAT_PREFIX+'cloud:heartbeat'
 PROFILE_NAME=os.environ.get('PROFILE_NAME','cloud-safe' if WORKER_KIND!='local' else 'safe-unknown')
 LOCAL_VLM_URL=os.environ.get('LOCAL_VLM_URL','').strip()
 LOCAL_VLM_MODEL=os.environ.get('LOCAL_VLM_MODEL','qwen2.5vl:3b').strip()
@@ -43,28 +46,33 @@ def self_test():
 
 def heartbeat_payload():
     return {
-        'kind':'local',
+        'kind':WORKER_KIND,
         'engine':ENGINE_VERSION,
         'profile':PROFILE_NAME,
         'resolution':[RENDER_WIDTH,RENDER_HEIGHT],
         'fps':RENDER_FPS,
         'ffmpegThreads':FFMPEG_THREADS,
-        'localAI':bool(LOCAL_VLM_URL),
-        'model':LOCAL_VLM_MODEL if LOCAL_VLM_URL else None,
+        'localAI':bool(LOCAL_VLM_URL) if WORKER_KIND=='local' else False,
+        'model':LOCAL_VLM_MODEL if WORKER_KIND=='local' and LOCAL_VLM_URL else None,
         'updatedAt':int(time.time()),
     }
 
 
-def local_heartbeat():
+def heartbeat_key(kind):
+    return LOCAL_HEARTBEAT_KEY if kind=='local' else CLOUD_HEARTBEAT_KEY
+
+
+def worker_heartbeat():
+    key=heartbeat_key(WORKER_KIND)
     while True:
-        try:queue.set(LOCAL_HEARTBEAT_KEY,json.dumps(heartbeat_payload()),ex=18)
+        try:queue.set(key,json.dumps(heartbeat_payload()),ex=20)
         except Exception:pass
         time.sleep(5)
 
 
-def read_local_heartbeat():
+def read_worker_heartbeat(kind):
     try:
-        raw=queue.get(LOCAL_HEARTBEAT_KEY)
+        raw=queue.get(heartbeat_key(kind))
         if not raw:return None
         value=json.loads(raw)
         return value if isinstance(value,dict) else None
@@ -100,16 +108,19 @@ class Health(BaseHTTPRequestHandler):
         except Exception:pass
         try:ff_ok=run([FFMPEG,'-version'],15,False).returncode==0
         except Exception:pass
-        local_info=read_local_heartbeat()
+        local_info=read_worker_heartbeat('local')
+        cloud_info=read_worker_heartbeat('cloud')
         try:queue_depth=int(queue.llen('auto_director:jobs'))
         except Exception:queue_depth=None
         body=json.dumps({
             'ok':db_ok and q_ok and ff_ok,
             'worker':'ready',
             'workerKind':WORKER_KIND,
-            'activeWorker':'local' if local_info else 'cloud',
+            'activeWorker':'local' if local_info else ('cloud' if cloud_info else WORKER_KIND),
             'localWorkerOnline':bool(local_info),
+            'cloudWorkerOnline':bool(cloud_info),
             'localWorker':local_info,
+            'cloudWorker':cloud_info,
             'engine':ENGINE_VERSION,
             'database':db_ok,
             'queue':q_ok,
@@ -119,7 +130,7 @@ class Health(BaseHTTPRequestHandler):
             'fps':RENDER_FPS,
             'ffmpegThreads':FFMPEG_THREADS,
             'ai':'openai' if OPENAI_API_KEY else ('local-vlm' if LOCAL_VLM_URL else 'local-v8'),
-            'capabilities':['moment-ranker','style-fingerprint','multi-plan-director','performance-memory','retention-critic','auto-revision','job-recovery','local-worker-priority','adaptive-safe-mode']
+            'capabilities':['moment-ranker','style-fingerprint','multi-plan-director','performance-memory','retention-critic','auto-revision','job-recovery','local-worker-priority','adaptive-safe-mode','durable-queue-recovery','worker-heartbeats']
         }).encode()
         self._headers(200 if db_ok and q_ok and ff_ok else 503,len(body));self.wfile.write(body)
     def log_message(self,*args):pass
@@ -143,8 +154,7 @@ def next_job():
 
 
 def main():
-    ensure_schema();recover_stale_jobs();threading.Thread(target=health_server,daemon=True).start()
-    if WORKER_KIND=='local':threading.Thread(target=local_heartbeat,daemon=True).start()
+    ensure_schema();recover_stale_jobs();threading.Thread(target=health_server,daemon=True).start();threading.Thread(target=worker_heartbeat,daemon=True).start()
     print(f'Auto Director V{ENGINE_VERSION} ready {RENDER_WIDTH}x{RENDER_HEIGHT}@{RENDER_FPS} kind={WORKER_KIND} profile={PROFILE_NAME} localAI={bool(LOCAL_VLM_URL)}',flush=True)
     if SELF_TEST:self_test()
     while True:
