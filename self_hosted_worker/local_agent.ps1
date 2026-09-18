@@ -1,21 +1,43 @@
 $ErrorActionPreference = 'Stop'
 
-$AgentVersion = '2.0'
+$AgentVersion = '2.1'
 $AllowedOrigin = 'https://auto-director-web.onrender.com'
 $Port = 8765
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
 $Launcher = Join-Path $RepoRoot 'self_hosted_worker\START_LOCAL_WORKER_WINDOWS.ps1'
+$LogFile = Join-Path $InstallRoot 'worker.log'
 $script:WorkerPid = $null
+$script:LastExitCode = $null
+$script:LastStartError = ''
+
+function Get-LogTail {
+  try {
+    if (-not (Test-Path $LogFile)) { return '' }
+    return ((Get-Content $LogFile -Tail 18 -ErrorAction Stop) -join "`n")[-2000..-1] -join ''
+  } catch {
+    try { return ((Get-Content $LogFile -Tail 18 -ErrorAction SilentlyContinue) -join "`n") } catch { return '' }
+  }
+}
 
 function Worker-IsRunning {
   if (-not $script:WorkerPid) { return $false }
-  try { Get-Process -Id $script:WorkerPid -ErrorAction Stop | Out-Null; return $true }
-  catch { $script:WorkerPid = $null; return $false }
+  try {
+    $p = Get-Process -Id $script:WorkerPid -ErrorAction Stop
+    if ($p.HasExited) { $script:LastExitCode=$p.ExitCode;$script:WorkerPid=$null;return $false }
+    return $true
+  } catch {
+    $script:WorkerPid=$null
+    return $false
+  }
 }
 
 function Json-Response([bool]$ok, [hashtable]$extra = @{}) {
-  $body = @{ ok=$ok; agent=$true; agentVersion=$AgentVersion; workerRunning=(Worker-IsRunning); workerPid=$script:WorkerPid }
+  $running=Worker-IsRunning
+  $body = @{
+    ok=$ok; agent=$true; agentVersion=$AgentVersion; workerRunning=$running; workerPid=$script:WorkerPid;
+    lastExitCode=$script:LastExitCode; lastStartError=$script:LastStartError; logTail=(Get-LogTail)
+  }
   foreach ($k in $extra.Keys) { $body[$k]=$extra[$k] }
   return ($body | ConvertTo-Json -Compress -Depth 6)
 }
@@ -34,27 +56,41 @@ function Write-Response($stream,[int]$status,[string]$body,[string]$origin) {
 }
 
 function Stop-Worker {
-  if (-not (Worker-IsRunning)) { return }
-  try { & taskkill.exe /PID $script:WorkerPid /T /F | Out-Null } catch {}
+  if (Worker-IsRunning) {
+    try { & taskkill.exe /PID $script:WorkerPid /T /F | Out-Null } catch {}
+  }
   $script:WorkerPid=$null
 }
 
+function Send-StartingHeartbeat([string]$studioUrl,[string]$workerToken) {
+  try {
+    $headers=@{ Authorization="Bearer $workerToken" }
+    $hb=@{engine='8.6';profile='starting';resolution=@(720,1280);fps=24;ffmpegThreads=1;localAI=$false} | ConvertTo-Json -Compress
+    Invoke-RestMethod -Method Post -Uri ($studioUrl.TrimEnd('/') + '/api/local-worker/heartbeat') -Headers $headers -ContentType 'application/json' -Body $hb -TimeoutSec 12 | Out-Null
+  } catch {}
+}
+
 function Start-Worker([string]$studioUrl,[string]$studioToken) {
-  if (Worker-IsRunning) { return @{ alreadyRunning=$true } }
+  if (Worker-IsRunning) { return @{ alreadyRunning=$true; pid=$script:WorkerPid } }
+  $script:LastStartError='';$script:LastExitCode=$null
   if (-not (Test-Path $Launcher)) { throw 'Worker local non installé. Réinstalle Auto Director Local Agent.' }
   $uri=[Uri]$studioUrl
   if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'auto-director-web.onrender.com') { throw 'Studio non autorisé.' }
   if (-not $studioToken -or $studioToken.Length -lt 20) { throw 'Session Studio manquante.' }
 
-  # Exchange the Studio session for a short-lived worker-scoped token.
   $headers=@{ Authorization="Bearer $studioToken" }
   $body=@{ label=$env:COMPUTERNAME } | ConvertTo-Json -Compress
   $session=Invoke-RestMethod -Method Post -Uri ($studioUrl.TrimEnd('/') + '/api/local-worker/session') -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 20
   if (-not $session.workerToken) { throw 'Le Studio n a pas fourni de jeton worker.' }
 
+  New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+  Set-Content -Path $LogFile -Value ("=== Auto Director worker start " + (Get-Date -Format o) + " ===") -Encoding UTF8
+  Send-StartingHeartbeat $studioUrl ([string]$session.workerToken)
+
+  $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" >> `"$LogFile`" 2>&1"
   $psi=New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName='powershell.exe'
-  $psi.Arguments="-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`""
+  $psi.FileName=$env:ComSpec
+  $psi.Arguments="/d /s /c `"$command`""
   $psi.WorkingDirectory=$RepoRoot
   $psi.UseShellExecute=$false
   $psi.CreateNoWindow=$true
@@ -65,7 +101,13 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   $proc=[System.Diagnostics.Process]::Start($psi)
   if (-not $proc) { throw 'Impossible de démarrer le worker.' }
   $script:WorkerPid=$proc.Id
-  return @{ pid=$proc.Id; started=$true; transport='https'; workerId=[string]$session.workerId }
+  Start-Sleep -Milliseconds 1200
+  if (-not (Worker-IsRunning)) {
+    $tail=Get-LogTail
+    $script:LastStartError=if($tail){$tail}else{'Le processus worker s est arrêté immédiatement.'}
+    throw $script:LastStartError
+  }
+  return @{ pid=$proc.Id; started=$true; transport='https'; workerId=[string]$session.workerId; logFile=$LogFile }
 }
 
 $listener=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,$Port)
@@ -89,9 +131,9 @@ while ($true) {
       if($length -gt 0){$chars=New-Object char[] $length;$total=0;while($total -lt $length){$n=$reader.Read($chars,$total,$length-$total);if($n -le 0){break};$total+=$n};$body=New-Object string($chars,0,$total)}
     }
     if($method -eq 'GET' -and $path -eq '/status'){
-      Write-Response $stream 200 (Json-Response $true @{installRoot=$InstallRoot;transport='https'}) $origin
+      Write-Response $stream 200 (Json-Response $true @{installRoot=$InstallRoot;transport='https';logFile=$LogFile}) $origin
     } elseif($method -eq 'POST' -and $path -eq '/start'){
-      try{$data=if($body){$body|ConvertFrom-Json}else{$null};if(-not $data){throw 'Requête vide.'};$result=Start-Worker ([string]$data.studioUrl) ([string]$data.token);Write-Response $stream 200 (Json-Response $true $result) $origin}catch{Write-Response $stream 500 (Json-Response $false @{error=$_.Exception.Message}) $origin}
+      try{$data=if($body){$body|ConvertFrom-Json}else{$null};if(-not $data){throw 'Requête vide.'};$result=Start-Worker ([string]$data.studioUrl) ([string]$data.token);Write-Response $stream 200 (Json-Response $true $result) $origin}catch{$script:LastStartError=$_.Exception.Message;Write-Response $stream 500 (Json-Response $false @{error=$_.Exception.Message}) $origin}
     } elseif($method -eq 'POST' -and $path -eq '/stop'){
       Stop-Worker;Write-Response $stream 200 (Json-Response $true @{stopped=$true}) $origin
     } else { Write-Response $stream 404 (Json-Response $false @{error='not found'}) $origin }
