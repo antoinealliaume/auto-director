@@ -5,6 +5,8 @@ import os
 import redis
 from fastapi.responses import JSONResponse
 
+from .v9_api import attach as attach_v9
+
 REDIS_URL = os.environ.get('REDIS_URL', '')
 LOGIN_LIMIT = max(5, min(30, int(os.environ.get('LOGIN_LIMIT', '10'))))
 LOGIN_WINDOW = max(60, min(3600, int(os.environ.get('LOGIN_WINDOW_SECONDS', '600'))))
@@ -34,11 +36,12 @@ def _studio_authorized(request):
 
 
 def attach(app):
+    attach_v9(app)
+
     @app.middleware('http')
     async def security_middleware(request, call_next):
         path = request.url.path
 
-        # Never expose cloud connection strings to a client-side worker.
         if path == '/api/worker/bootstrap':
             return JSONResponse(
                 {'detail': 'Legacy worker bootstrap disabled. Use the HTTPS local-worker protocol.'},
@@ -46,7 +49,6 @@ def attach(app):
                 headers={'Cache-Control': 'no-store'},
             )
 
-        # The deep health report can contain infrastructure error details.
         if path == '/health/deep' and not _studio_authorized(request):
             return JSONResponse({'detail': 'Authentification requise'}, status_code=401, headers={'Cache-Control': 'no-store'})
 
