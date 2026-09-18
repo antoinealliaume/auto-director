@@ -86,4 +86,4 @@ if($LASTEXITCODE -ne 0){throw 'Le diagnostic a détecté un problème critique.'
 
 Write-Host ''
 Write-Host 'Worker PC démarré. Il devient prioritaire sur Render quand son heartbeat HTTPS est reçu.' -ForegroundColor Green
-& .\.venv-local\Scripts\python.exe (Join-Path $PSScriptRoot 'http_worker.py')
+& .\.venv-local\Scripts\python.exe (Join-Path $PSScriptRoot 'http_worker_v2.py')
