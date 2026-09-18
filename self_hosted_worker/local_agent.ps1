@@ -14,17 +14,16 @@ $script:LastStartError = ''
 function Get-LogTail {
   try {
     if (-not (Test-Path $LogFile)) { return '' }
-    return ((Get-Content $LogFile -Tail 18 -ErrorAction Stop) -join "`n")[-2000..-1] -join ''
-  } catch {
-    try { return ((Get-Content $LogFile -Tail 18 -ErrorAction SilentlyContinue) -join "`n") } catch { return '' }
-  }
+    $text = ((Get-Content $LogFile -Tail 18 -ErrorAction Stop) -join "`n")
+    if ($text.Length -gt 2000) { $text = $text.Substring($text.Length - 2000) }
+    return $text
+  } catch { return '' }
 }
 
 function Worker-IsRunning {
   if (-not $script:WorkerPid) { return $false }
   try {
-    $p = Get-Process -Id $script:WorkerPid -ErrorAction Stop
-    if ($p.HasExited) { $script:LastExitCode=$p.ExitCode;$script:WorkerPid=$null;return $false }
+    Get-Process -Id $script:WorkerPid -ErrorAction Stop | Out-Null
     return $true
   } catch {
     $script:WorkerPid=$null
@@ -87,10 +86,11 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   Set-Content -Path $LogFile -Value ("=== Auto Director worker start " + (Get-Date -Format o) + " ===") -Encoding UTF8
   Send-StartingHeartbeat $studioUrl ([string]$session.workerToken)
 
-  $command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" >> `"$LogFile`" 2>&1"
+  $launcherEsc = $Launcher.Replace("'","''")
+  $logEsc = $LogFile.Replace("'","''")
   $psi=New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName=$env:ComSpec
-  $psi.Arguments="/d /s /c `"$command`""
+  $psi.FileName='powershell.exe'
+  $psi.Arguments="-NoProfile -ExecutionPolicy Bypass -Command `"& '$launcherEsc' *>> '$logEsc'`""
   $psi.WorkingDirectory=$RepoRoot
   $psi.UseShellExecute=$false
   $psi.CreateNoWindow=$true
@@ -101,7 +101,7 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   $proc=[System.Diagnostics.Process]::Start($psi)
   if (-not $proc) { throw 'Impossible de démarrer le worker.' }
   $script:WorkerPid=$proc.Id
-  Start-Sleep -Milliseconds 1200
+  Start-Sleep -Milliseconds 1400
   if (-not (Worker-IsRunning)) {
     $tail=Get-LogTail
     $script:LastStartError=if($tail){$tail}else{'Le processus worker s est arrêté immédiatement.'}
