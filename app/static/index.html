@@ -6,6 +6,7 @@
   <title>Auto Director Studio</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/worker-status.css?v=8.6" />
+  <link rel="stylesheet" href="/static/publication.css?v=8.6" />
 </head>
 <body>
 <div id="toast" class="toast"></div>
@@ -64,7 +65,7 @@
         <div class="worker-controls">
           <button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button>
           <span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span>
-          <a href="/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.0.1" download="INSTALL_AUTO_DIRECTOR_WORKER.bat" style="font-size:11px;color:#9aa4ff;text-decoration:none">Téléchargement direct</a>
+          <a href="/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.1" download="INSTALL_AUTO_DIRECTOR_WORKER.bat" style="font-size:11px;color:#9aa4ff;text-decoration:none">Téléchargement direct</a>
         </div>
       </div>
 
@@ -108,11 +109,12 @@
     <section id="tab-gallery" class="tab"><div class="section-title"><div><span class="eyebrow">OUTPUTS</span><h1>Galerie finale</h1></div></div><div id="gallery" class="gallery"></div></section>
     <section id="tab-intelligence" class="tab"><div class="section-title"><div><span class="eyebrow">CONTENT INTELLIGENCE</span><h1>Ce que le bot comprend</h1></div></div><div id="intel" class="dashboard-grid"></div><div class="card"><h3>Trend Intelligence</h3><div class="trend-row"><input id="trendLabel" placeholder="Ex. hook texte ultra court"><input id="trendUrl" placeholder="Lien de référence (optionnel)"><button id="addTrendBtn" class="btn secondary">Ajouter</button></div><textarea id="trendNotes" placeholder="Ce qui fonctionne dans cette tendance…"></textarea><div id="trendList" class="trend-list"></div></div></section>
     <section id="tab-learning" class="tab"><div class="section-title"><div><span class="eyebrow">PERFORMANCE MEMORY</span><h1>Learning</h1></div></div><div id="learningStats" class="health-grid wide"></div><div class="card"><h3>Ajouter les performances d'un rendu</h3><div class="feedback-grid"><select id="feedbackAsset"></select><input id="fViews" type="number" min="0" placeholder="Vues"><input id="fLikes" type="number" min="0" placeholder="Likes"><input id="fShares" type="number" min="0" placeholder="Partages"><input id="fCompletion" type="number" min="0" max="1" step="0.01" placeholder="Completion 0–1"><input id="fConversions" type="number" min="0" placeholder="Conversions"><button id="saveFeedbackBtn" class="btn primary">Enregistrer</button></div></div></section>
-    <section id="tab-publication" class="tab"><div class="section-title"><div><span class="eyebrow">PUBLISHING</span><h1>Centre de publication</h1></div></div><div class="card"><div class="field"><label>Rendu</label><select id="publicationAsset"></select></div><button id="generatePackBtn" class="btn primary">Générer le pack TikTok</button><div id="publicationPack" class="publication-pack"></div><p class="hint">La publication automatique TikTok nécessite une connexion OAuth TikTok autorisée. Le Studio prépare déjà le MP4, la caption, les hashtags et le CTA.</p></div></section>
+    <section id="tab-publication" class="tab"><div class="section-title"><div><span class="eyebrow">PUBLISHING</span><h1>Centre de publication</h1></div></div></section>
   </main>
 </div>
 <script src="/static/app.js"></script>
 <script src="/static/secure-media.js?v=8.6"></script>
-<script src="/static/worker-status.js?v=2.0.1"></script>
+<script src="/static/worker-status.js?v=2.1"></script>
+<script src="/static/publication.js?v=8.6"></script>
 </body>
 </html>
