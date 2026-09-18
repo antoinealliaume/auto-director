@@ -1,19 +1,15 @@
 (()=>{
   const STATUS_URL='/api/worker-status';
   const LOCAL_AGENT_URL='http://127.0.0.1:8765';
-  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.1';
-  const MIN_AGENT_VERSION=2.1;
+  const INSTALLER_URL='/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.2';
+  const MIN_AGENT_VERSION=2.2;
   const byId=id=>document.getElementById(id);
   const safe=v=>v==null?'—':String(v);
   let agentState={online:false,workerRunning:false,busy:false,version:'',needsUpdate:false,lastError:'',logTail:''};
 
   const renderLabel=info=>{const r=Array.isArray(info?.resolution)?info.resolution.join('×'):'—';return r+(info?.fps?` @ ${info.fps} fps`:'')};
   const notify=(message,type='ok')=>{try{if(typeof toast==='function')return toast(message,type)}catch{}console.log(message)};
-
-  function shortError(text){
-    const s=String(text||'').replace(/\s+/g,' ').trim();
-    return s.length>180?s.slice(-180):s;
-  }
+  const shortError=text=>{const s=String(text||'').replace(/[\u0000-\u001f]+/g,' ').replace(/\s+/g,' ').trim();return s.length>220?s.slice(-220):s};
 
   function ensureControls(){
     const banner=byId('workerBanner');if(!banner)return;
@@ -27,7 +23,7 @@
     b.disabled=!!agentState.busy;b.className='worker-control-btn';
     if(agentState.busy){b.textContent='Patiente…';s.textContent='Agent PC : opération en cours';return}
     if(!agentState.online){b.classList.add('install');b.textContent='⬇ Installer le worker PC';s.textContent='Agent PC : non installé';return}
-    if(agentState.needsUpdate){b.classList.add('install');b.textContent='↻ Mettre à jour le worker PC';s.textContent=`Agent PC ${agentState.version||'ancien'} : mise à jour 2.1 requise`;return}
+    if(agentState.needsUpdate){b.classList.add('install');b.textContent='↻ Mettre à jour le worker PC';s.textContent=`Agent PC ${agentState.version||'ancien'} : mise à jour 2.2 requise`;return}
     if(agentState.workerRunning){b.classList.add('stop');b.textContent='■ Arrêter le worker PC';s.textContent=`Agent PC ${agentState.version} : worker démarré`;return}
     b.textContent='▶ Démarrer le worker PC';
     if(agentState.lastError||agentState.logTail){s.textContent='Dernière erreur : '+shortError(agentState.lastError||agentState.logTail)}
@@ -55,7 +51,7 @@
 
   async function agentPost(path,body={}){
     const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30000);
-    try{const r=await fetch(LOCAL_AGENT_URL+path,{method:'POST',mode:'cors',cache:'no-store',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok)throw new Error(data.error||`Agent ${r.status}`);return data}finally{clearTimeout(timer)}
+    try{const r=await fetch(LOCAL_AGENT_URL+path,{method:'POST',mode:'cors',cache:'no-store',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json().catch(()=>({}));if(!r.ok||!data.ok)throw new Error(shortError(data.error)||`Agent ${r.status}`);return data}finally{clearTimeout(timer)}
   }
 
   async function handleLocalWorkerClick(){
@@ -64,8 +60,8 @@
     agentState.busy=true;agentState.lastError='';renderAgentControl();
     try{
       if(agentState.workerRunning){await agentPost('/stop');notify('Worker PC arrêté. Render reprend automatiquement en secours.')}
-      else{const session=localStorage.getItem('ad_token')||'';if(!session)throw new Error('Reconnecte-toi au Studio avant de lancer le worker PC.');await agentPost('/start',{studioUrl:location.origin,token:session});notify('Worker PC HTTPS lancé. Le premier démarrage peut prendre 1 à 2 minutes pour préparer Python/FFmpeg.')}
-    }catch(e){notify(e.message||'Impossible de contrôler le worker PC.','error')}
+      else{const session=localStorage.getItem('ad_token')||'';if(!session)throw new Error('Reconnecte-toi au Studio avant de lancer le worker PC.');await agentPost('/start',{studioUrl:location.origin,token:session});notify('Worker PC lancé. Le premier démarrage peut prendre 1 à 2 minutes pour préparer Python/FFmpeg.')}
+    }catch(e){notify(shortError(e.message)||'Impossible de contrôler le worker PC.','error')}
     finally{agentState.busy=false;setTimeout(pollAgent,700);setTimeout(pollWorker,1200);setTimeout(pollAgent,4500);setTimeout(pollWorker,5200)}
   }
 
