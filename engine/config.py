@@ -130,6 +130,11 @@ def recover_stale_jobs():
             recovered.append(jid)
         queued=c.execute("select id from jobs where status='queued' order by created_at asc limit 200").fetchall()
     for (jid,) in queued:
+        # PostgreSQL says the job is available, so a Redis lock can only be stale.
+        # Purge it before rebuilding the volatile queue; otherwise the worker pops
+        # the job, fails acquire_job_lock(), and silently loses the queue entry.
+        try:queue.delete('autodirector:lock:'+str(jid))
+        except Exception:pass
         if _enqueue_if_missing(jid):recovered.append(jid)
     if recovered:
         print(f'Queue recovery: {len(set(map(str,recovered)))} durable job(s) available',flush=True)
