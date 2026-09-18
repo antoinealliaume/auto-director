@@ -1,4 +1,21 @@
 (()=>{
+  // Navigation must stay operational even if another optional frontend module fails.
+  const titles={studio:'Studio de création',pipeline:'Pipeline de production',gallery:'Galerie finale',intelligence:'Content Intelligence',learning:'Performance Memory',publication:'Centre de publication'};
+  function activateTab(name){
+    const target=document.getElementById(`tab-${name}`);
+    if(!target)return;
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('#nav button[data-tab]').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));
+    target.classList.add('active');
+    const title=document.getElementById('pageTitle');if(title)title.textContent=titles[name]||'Studio';
+    if(name==='learning'&&typeof loadLearning==='function')Promise.resolve(loadLearning()).catch(()=>{});
+  }
+  document.querySelectorAll('#nav button[data-tab]').forEach(button=>{
+    if(button.dataset.navFallbackBound==='1')return;
+    button.addEventListener('click',()=>activateTab(button.dataset.tab));
+    button.dataset.navFallbackBound='1';
+  });
+
   const cache=new Map();
   async function mediaUrl(id){
     const now=Date.now();const hit=cache.get(id);
@@ -28,9 +45,4 @@
       }catch(e){console.warn('Media ticket failed',e)}
     });
   };
-
-  // Keep the HTML shell small: feature modules can evolve independently.
-  if(!document.querySelector('script[data-auto-director-publication]')){
-    const s=document.createElement('script');s.src='/static/publication.js?v=8.6';s.dataset.autoDirectorPublication='1';document.body.appendChild(s);
-  }
 })();
