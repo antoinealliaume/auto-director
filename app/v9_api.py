@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""V9 Studio API additions kept separate from legacy-compatible routes."""
+"""V9 Studio API additions kept separate from legacy-compatible internals."""
 from typing import Optional
 import uuid
 
@@ -25,6 +25,13 @@ class V9JobIn(BaseModel):
 
 
 def attach(app):
+    # Replace only the legacy POST /api/jobs route. Existing callers keep the
+    # same URL while V9 settings stop being silently discarded.
+    app.router.routes[:]=[
+        route for route in app.router.routes
+        if not (getattr(route,'path',None)=='/api/jobs' and 'POST' in (getattr(route,'methods',set()) or set()))
+    ]
+
     @app.get('/api/v9/meta',include_in_schema=False)
     def meta(authorization:Optional[str]=Header(None)):
         from .main import require_auth
@@ -36,8 +43,7 @@ def attach(app):
             'hookStyles':sorted(HOOK_STYLES),
         }
 
-    @app.post('/api/v9/jobs',include_in_schema=False)
-    def create_v9_job(x:V9JobIn,authorization:Optional[str]=Header(None)):
+    def _create(x:V9JobIn,authorization:Optional[str]):
         from .main import require_auth,parse_uuid,db,queue,QUEUE_KEY
         require_auth(authorization)
         pid=parse_uuid(x.projectId,'Projet')
@@ -62,9 +68,14 @@ def attach(app):
             c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,%s,%s,%s)",(jid,pid,'V9 accepté · en attente du worker',max(1,min(3,int(x.variants))),Jsonb(settings)))
             c.execute("insert into job_events(job_id,stage,message) values(%s,'queued',%s)",(jid,f'Job V9 créé · mode {mode} · intensité {intensity}'))
         signalled=False
-        try:
-            queue.lpush(QUEUE_KEY,str(jid));signalled=True
-        except Exception:
-            # PostgreSQL remains the source of truth; worker recovery will requeue it.
-            pass
+        try:queue.lpush(QUEUE_KEY,str(jid));signalled=True
+        except Exception:pass
         return {'id':str(jid),'status':'queued','version':'9.0','directorMode':mode,'queueSignalled':signalled}
+
+    @app.post('/api/jobs',include_in_schema=False)
+    def create_job(x:V9JobIn,authorization:Optional[str]=Header(None)):
+        return _create(x,authorization)
+
+    @app.post('/api/v9/jobs',include_in_schema=False)
+    def create_v9_job(x:V9JobIn,authorization:Optional[str]=Header(None)):
+        return _create(x,authorization)
