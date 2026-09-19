@@ -436,7 +436,7 @@ def retry_job(job_id: str, authorization: Optional[str] = Header(None)):
     with db() as c:
         c.execute(
             """update jobs set status='queued',stage='queued',progress=0,message='Relancé',
-               output_asset_ids='{}',critic_score=null,revision_count=0,strategy='',creative_brief='{}'::jsonb,updated_at=now()
+               output_asset_ids='{}',critic_score=0,revision_count=0,strategy='',creative_brief='{}'::jsonb,updated_at=now()
                where id=%s""",
             (jid,),
         )
