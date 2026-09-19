@@ -156,7 +156,7 @@ def make_plan(project,sources,style,profile,context,target,strategy,variant=0,re
         if fit:segs[-1]=_segment(best,fit,float(segs[-1]['zoom']),'Voilà le moment')
     return {
         'hook':_hook(project,strategy,variant,hook_style),'strategy':strategy,'segments':segs,'pace':round(pace,2),
-        'source':'director-v9.2-style','intensity':intensity,'hookStyle':hook_style,'qualityEngine':'shot-speech-beat-style-aware',
+        'source':'director-v9.2-style','intensity':intensity,'hookStyle':hook_style,'qualityEngine':'shot-speech-beat-aware',
     }
 
 
