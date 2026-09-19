@@ -4,20 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#090b14" />
-  <title>Auto Director Studio V9.3</title>
-  <link rel="stylesheet" href="/static/style.css?v=9.3.0" />
-  <link rel="stylesheet" href="/static/worker-status.css?v=9.3.0" />
-  <link rel="stylesheet" href="/static/publication.css?v=9.3.0" />
-  <link rel="stylesheet" href="/static/v2-status.css?v=9.3.0" />
-  <link rel="stylesheet" href="/static/operator-experience.css?v=9.3.0" />
-  <link rel="stylesheet" href="/static/visual-refresh.css?v=9.3.0" />
+  <title>Auto Director Studio V9.4</title>
+  <link rel="stylesheet" href="/static/style.css?v=9.4.0" />
+  <link rel="stylesheet" href="/static/worker-status.css?v=9.4.0" />
+  <link rel="stylesheet" href="/static/publication.css?v=9.4.0" />
+  <link rel="stylesheet" href="/static/v2-status.css?v=9.4.0" />
+  <link rel="stylesheet" href="/static/operator-experience.css?v=9.4.0" />
+  <link rel="stylesheet" href="/static/visual-refresh.css?v=9.4.0" />
+  <link rel="stylesheet" href="/static/studio-polish.css?v=9.4.0" />
 </head>
 <body>
 <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
-<section id="loginView" class="login-shell"><div class="login-card"><div class="login-glow"></div><div class="logo">AD</div><span class="eyebrow">PRIVATE CREATOR OS</span><h1>Auto Director <em>V9.3</em></h1><p>Ton studio privé pour transformer tes rushs en vidéos courtes prêtes pour une publication manuelle.</p><label class="sr-only" for="loginPassword">Mot de passe du Studio</label><input id="loginPassword" type="password" placeholder="Mot de passe du Studio" autocomplete="current-password" /><button id="loginBtn" class="btn primary full">Entrer dans le Studio</button><div id="loginError" class="error-text" role="alert"></div></div></section>
+<section id="loginView" class="login-shell"><div class="login-card"><div class="login-glow"></div><div class="logo">AD</div><span class="eyebrow">PRIVATE CREATOR OS</span><h1>Auto Director <em>V9.4</em></h1><p>Ton studio privé pour transformer tes rushs en vidéos courtes prêtes pour une publication manuelle.</p><label class="sr-only" for="loginPassword">Mot de passe du Studio</label><input id="loginPassword" type="password" placeholder="Mot de passe du Studio" autocomplete="current-password" /><button id="loginBtn" class="btn primary full">Entrer dans le Studio</button><div id="loginError" class="error-text" role="alert"></div></div></section>
 <div id="studio" class="layout hidden">
   <aside class="sidebar">
-    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V9.3</span></div></div>
+    <div class="brand"><div class="logo small">AD</div><div><b>Auto Director</b><span>Studio V9.4</span></div></div>
     <div class="nav-label">WORKSPACE</div>
     <nav id="nav">
       <button data-tab="studio" class="active"><span class="nav-icon">◆</span><span class="nav-text">Studio</span></button>
@@ -30,9 +31,10 @@
     <div class="sidebar-bottom"><div class="service-dot"><i id="statusDot"></i><span id="serviceLabel">Connexion…</span></div><button id="logoutBtn" class="text-btn">Déconnexion</button></div>
   </aside>
   <main class="main">
-    <header class="topbar"><div><span class="eyebrow">AUTO DIRECTOR / STUDIO 9.3</span><h2 id="pageTitle">Studio de création</h2></div><div class="top-actions"><span id="globalState" class="system-chip">Système actif</span><button id="refreshBtn" class="btn ghost">↻ Actualiser</button></div></header>
+    <header class="topbar"><div><span class="eyebrow">AUTO DIRECTOR / STUDIO 9.4</span><h2 id="pageTitle">Studio de création</h2></div><div class="top-actions"><span id="globalState" class="system-chip">Système actif</span><button id="refreshBtn" class="btn ghost">↻ Actualiser</button></div></header>
+    <section class="studio-ribbon" aria-label="Parcours de création"><div class="ribbon-steps"><button type="button" data-quick-tab="studio"><i>01</i><span><b>Préparer</b><small>Projet et rushs</small></span></button><button type="button" data-quick-tab="pipeline"><i>02</i><span><b>Produire</b><small>Suivre le rendu</small></span></button><button type="button" data-quick-tab="gallery"><i>03</i><span><b>Vérifier</b><small>Comparer les sorties</small></span></button><button type="button" data-quick-tab="publication"><i>04</i><span><b>Exporter</b><small>Action manuelle</small></span></button></div><div class="manual-safety"><i></i><span><b>Publication manuelle</b><small>Aucun envoi automatique</small></span></div></section>
     <section id="tab-studio" class="tab active">
-      <section class="hero-v9"><div class="hero-copy"><span class="eyebrow purple">QUALITY ENGINE · STUDIO 9.3</span><h1>Du rush brut au <span>montage qui retient.</span></h1><p>Le Studio comprend les plans, la parole, les impacts audio et le rythme pour construire des cuts plus naturels, plus propres et mieux cadrés.</p><div class="hero-badges"><span>Shot-aware</span><span>Beat-aware</span><span>Smart Crop</span><span>Auto Critic</span><span>PC + Cloud</span></div></div><div class="health-grid overview-grid"><div><span>Projets</span><b id="statProjects">0</b></div><div><span>Rushs</span><b id="statSources">0</b></div><div><span>Rendus</span><b id="statRenders">0</b></div><div><span>Moteur</span><b id="statAi">V9.2</b></div><div><span>Worker</span><b id="statWorker">—</b></div></div></section>
+      <section class="hero-v9"><div class="hero-copy"><span class="eyebrow purple">QUALITY ENGINE · STUDIO 9.4</span><h1>Du rush brut au <span>montage qui retient.</span></h1><p>Le Studio comprend les plans, la parole, les impacts audio et le rythme pour construire des cuts plus naturels, plus propres et mieux cadrés.</p><div class="hero-badges"><span>Shot-aware</span><span>Beat-aware</span><span>Smart Crop</span><span>Auto Critic</span><span>PC + Cloud</span></div></div><div class="health-grid overview-grid"><div><span>Projets</span><b id="statProjects">0</b></div><div><span>Rushs</span><b id="statSources">0</b></div><div><span>Rendus</span><b id="statRenders">0</b></div><div><span>Moteur</span><b id="statAi">V9.2</b></div><div><span>Worker</span><b id="statWorker">—</b></div></div></section>
       <div id="workerBanner" class="worker-banner"><div class="worker-main"><i id="workerStatusLed" class="worker-led"></i><div class="worker-copy"><b id="workerStatusLabel">Détection du worker…</b><span id="workerStatusDetail">Vérification du PC local et du fallback Render.</span></div></div><div class="worker-pills"><span id="workerProfilePill" class="worker-pill">Profil —</span><span id="workerRenderPill" class="worker-pill">Rendu —</span><span id="workerAiPill" class="worker-pill">IA —</span><span id="workerQueuePill" class="worker-pill">File —</span></div><div class="worker-controls"><button id="localWorkerControl" class="worker-control-btn install" type="button">Détecter le PC…</button><span id="localAgentState" class="worker-agent-state">Agent PC : détection…</span><a href="/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.8" download="INSTALL_AUTO_DIRECTOR_WORKER.bat" class="worker-direct-link">Télécharger la mise à jour</a></div></div>
       <div class="workspace-grid">
         <section class="card project-card"><div class="card-head"><div><span class="step">01</span><div><h3>Projet</h3><small>Organise ton contenu</small></div></div><span class="muted">Workspace</span></div><div class="field"><label>Projet actif</label><select id="projectSelect"><option value="">Aucun projet</option></select></div><div class="create-row"><input id="projectName" placeholder="Ex. GMod DarkRP RiverSide" maxlength="120"/><button id="createProjectBtn" class="btn secondary">Créer</button></div><div id="projectHint" class="hint">Crée un projet pour commencer.</div></section>
@@ -48,9 +50,10 @@
     <section id="tab-publication" class="tab"><div class="section-title"><span class="eyebrow">PUBLISHING</span><h1>Centre de publication</h1></div></section>
   </main>
 </div>
-<script src="/static/app.js?v=9.3.0"></script>
-<script src="/static/secure-media.js?v=9.3.0"></script>
+<script src="/static/app.js?v=9.4.0"></script>
+<script src="/static/secure-media.js?v=9.4.0"></script>
 <script src="/static/worker-status.js?v=2.8"></script>
-<script src="/static/publication.js?v=9.3.0"></script>
+<script src="/static/publication.js?v=9.4.0"></script>
+<script src="/static/studio-polish.js?v=9.4.0"></script>
 </body>
 </html>
