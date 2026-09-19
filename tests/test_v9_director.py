@@ -64,6 +64,13 @@ class V9RouteTests(unittest.TestCase):
         self.assertIn('critic_score=0',source)
         self.assertNotIn('critic_score=null',source)
 
+    def test_api_version_metadata_is_v9_2(self):
+        source=Path('app/main.py').read_text(encoding='utf-8')
+        self.assertIn('APP_VERSION = "9.2"',source)
+        self.assertIn('ENGINE_VERSION = "9.2"',source)
+        self.assertIn('"ai": "director-v9.2-style"',source)
+        self.assertNotIn('V8.7 keeps PostgreSQL',source)
+
 
 if __name__=='__main__':
     unittest.main()
