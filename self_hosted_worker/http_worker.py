@@ -48,7 +48,7 @@ def renew_loop():
     while not STOP.wait(RENEW_SECONDS):
         if not renew_token():STOP.wait(60)
 
-def heartbeat_payload():return {'engine':ENGINE_VERSION,'profile':PROFILE_NAME,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,'localAI':bool(local_ai_enabled()),'model':MODEL if local_ai_enabled() else None,'styleEngine':True}
+def heartbeat_payload():return {'engine':ENGINE_VERSION,'protocol':2,'agentVersion':'2.7','profile':PROFILE_NAME,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,'localAI':bool(local_ai_enabled()),'model':MODEL if local_ai_enabled() else None,'styleEngine':True}
 def heartbeat_loop():
     while not STOP.is_set():
         try:
@@ -121,7 +121,7 @@ def process_remote_job(job):
             meta={'engineVersion':ENGINE_VERSION,'worker':'pc-https','profile':PROFILE_NAME,'score':score,'duration':diag.get('duration'),'strategy':plan['strategy'],'hook':plan['hook'],'pace':plan.get('pace'),'predictedRetention':plan.get('predictedRetention'),'revisionCount':revision_count,'referenceCount':len(refs),'segmentCount':len(plan.get('segments',[])),'critic':diag,'styleFingerprint':style,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'localAI':local_ai_enabled(),'directorMode':mode,'editIntensity':intensity,'hookStyle':hook_style,'visualStyle':plan.get('visualStyle',visual_style),'styleEngine':plan.get('styleEngine'),'styleDiversity':plan.get('styleDiversity')}
             progress(jid,'upload',min(94,62+variant*14),f"Envoi sécurisé · {plan.get('visualStyle','auto')} · variante {variant+1}");upload_output(jid,final,meta);scores.append(float(score));gc.collect()
         with client(40) as c:
-            r=c.post(f'/api/local-worker/jobs/{jid}/complete',json={'score':max(scores) if scores else 0,'revisionCount':revisions,'strategy':last_strategy,'message':'V9.2 PC terminé · galerie prête'});r.raise_for_status()
+            r=c.post(f'/api/local-worker/jobs/{jid}/complete',json={'score':max(scores) if scores else 0,'revisionCount':revisions,'strategy':last_strategy,'message':'Rendu terminé · prêt pour publication manuelle'});r.raise_for_status()
         print(f'Job V9.2 {jid} terminé sur le PC · score {max(scores) if scores else 0}',flush=True)
 
 def claim_job():
