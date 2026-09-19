@@ -1,74 +1,90 @@
-# Auto Director - Worker local adaptatif sans credits IA
+# Auto Director - Worker PC V9.1
 
-Ce mode garde le Studio web disponible mais deplace le calcul lourd sur ton PC. Aucun credit OpenAI n'est necessaire pour le Director local.
+Le worker PC garde le Studio web sur Render et deplace le calcul video lourd sur le PC local. Le transport de production est HTTPS : le PC n'a pas besoin des identifiants PostgreSQL ou Redis.
 
-## Demarrage le plus simple
-Sous Windows, double-clique sur `START_LOCAL_WORKER.bat`.
+## Installation recommandee
 
-Au premier lancement :
-1. le script cree automatiquement `self_hosted_worker/.env` ;
-2. il utilise par defaut `https://auto-director-web.onrender.com` ;
-3. il te demande le mot de passe du Studio dans une saisie masquee ;
-4. il ouvre une session HTTPS et recupere la configuration Postgres/Redis en memoire ;
-5. il detecte le materiel ;
-6. il installe l'environnement Python local si necessaire ;
-7. il lance un diagnostic complet ;
-8. il demarre le worker.
+Depuis le Studio, telecharge puis lance `INSTALL_AUTO_DIRECTOR_WORKER.bat`.
 
-Tu n'as donc plus besoin de connaitre ton CPU, ta RAM, ta carte graphique, ni de copier manuellement les mots de passe Postgres/Redis.
+L'installateur :
+1. verifie qu'un Python reel >= 3.10 est disponible et installe Python 3.12 avec `winget` si necessaire ;
+2. arrete proprement un ancien agent Auto Director ;
+3. telecharge la derniere version du depot ;
+4. installe le depot dans `%LOCALAPPDATA%\AutoDirector\repo` ;
+5. configure l'agent local au demarrage de Windows ;
+6. demarre l'agent local 2.6 et verifie son endpoint local `127.0.0.1:8765/status`.
 
-Tu peux aussi double-cliquer sur `CHECK_MY_PC.bat` pour voir le profil choisi sans lancer un rendu.
+Le Studio peut ensuite demander a l'agent de demarrer ou d'arreter le worker PC.
+
+## Architecture securisee
+
+Le navigateur authentifie la session Studio puis contacte uniquement l'agent local sur `127.0.0.1:8765`. L'agent ouvre une session worker via HTTPS avec `https://auto-director-web.onrender.com` et recoit un jeton worker temporaire.
+
+Le worker PC utilise ce jeton pour :
+- publier son heartbeat ;
+- reclamer un job ;
+- telecharger les rushs necessaires via l'API securisee ;
+- envoyer la progression ;
+- televerser le MP4 final ;
+- terminer ou signaler l'echec du job.
+
+Aucun mot de passe PostgreSQL/Redis et aucune URL de base de donnees ne sont requis sur le PC en mode normal.
 
 ## Profils automatiques
-`detect_profile.py` detecte la RAM, le nombre de threads CPU et, si disponible, une carte NVIDIA avec sa VRAM. Le choix reste volontairement prudent :
-- `safe-minimal` : machine inconnue ou tres limitee ; V8 heuristique, 720x1280, 24 fps, 1-2 threads, pas de revision lourde ;
-- `safe-light` : machine modeste ; V8 complet, 720x1280, 24 fps, IA visuelle lourde desactivee ;
-- `safe-balanced` : machine confortable sans GPU suffisamment fiable ; 720x1280, 30 fps, toujours sans forcer un VLM sur le CPU ;
-- `safe-local-ai` : seulement si une marge suffisante est detectee, notamment RAM correcte + GPU NVIDIA d'environ 6 Go de VRAM ou plus. Le modele reste plafonne a `qwen2.5vl:3b`.
 
-Le bot ne selectionne jamais automatiquement un modele plus gros que 3B et n'active jamais le 1080p automatiquement.
+`detect_profile.py` detecte la RAM, le nombre de threads CPU et, si disponible, une carte NVIDIA avec sa VRAM. Le choix reste prudent :
+- `safe-minimal` : machine inconnue ou tres limitee ; 720x1280, 24 fps, charge minimale ;
+- `safe-light` : machine modeste ; 720x1280, 24 fps, modules lourds desactives ;
+- `safe-balanced` : machine confortable ; 720x1280, 30 fps ;
+- `safe-local-ai` : active seulement si les ressources detectees sont suffisantes, avec modele local plafonne a `qwen2.5vl:3b`.
+
+Le bot n'active pas automatiquement le 1080p et limite volontairement la charge locale.
+
+## Quality Engine V9.1
+
+Selon le profil materiel, le worker peut activer des composants locaux facultatifs :
+- detection de scenes ;
+- analyse audio / impacts ;
+- Smart Crop ;
+- transcription locale `faster-whisper` ;
+- Ollama + Qwen2.5-VL 3B.
+
+Si un module facultatif ne peut pas etre installe ou execute, le worker continue avec le moteur core au lieu de bloquer le rendu.
 
 ## Protections ressources
+
 - un seul job video a la fois ;
 - FFmpeg limite a quelques threads ;
 - processus Windows en priorite `BelowNormal` ;
 - 24 ou 30 fps suivant le profil ;
 - Ollama limite a 1 requete parallele et 1 modele charge ;
-- contexte VLM reduit ;
-- maximum 3 images par appel VLM ;
-- verification de la RAM libre avant chaque appel IA ;
-- si la RAM devient trop faible, l'appel IA est saute et le Director V8 continue ;
-- si Ollama n'est pas installe ou ne repond plus, le worker continue en mode V8 leger ;
-- si le materiel ne peut pas etre mesure de maniere fiable, le systeme choisit le profil le plus prudent.
+- verification du materiel avant activation des modules lourds ;
+- fallback automatique vers le moteur core si l'IA ou les modules qualite ne sont pas disponibles.
 
-## Doctor avant demarrage
-`doctor.py` verifie automatiquement :
+## Diagnostic avant demarrage
+
+`doctor.py` verifie en mode worker PC :
 - Python ;
 - FFmpeg ;
-- PostgreSQL ;
-- Redis ;
-- profil materiel ;
+- l'acces a l'API worker HTTPS du Studio ;
+- le profil materiel ;
 - Ollama si l'IA locale est activee.
 
-Un probleme critique bloque le demarrage avec un message clair au lieu de lancer un worker partiellement casse.
+Le diagnostic signale egalement si des secrets cloud `DATABASE_URL` ou `REDIS_URL` sont presents alors qu'ils ne sont pas necessaires au worker PC.
 
-## Priorite automatique local / cloud
-Quand le worker local tourne, il publie un heartbeat Redis contenant son profil, sa resolution, son nombre de threads et son mode IA. Le worker Render detecte ce heartbeat et se met en retrait.
+## Priorite PC / Render
 
-Quand tu fermes le worker local ou eteins ton PC, le heartbeat expire apres quelques secondes et Render reprend automatiquement comme secours.
+Quand le worker local tourne, il publie un heartbeat HTTPS. Le backend peut alors donner la priorite au PC. Lorsque le worker PC s'arrete et que le heartbeat expire, le worker Render reste disponible comme secours.
 
-Le Studio affiche egalement l'etat courant : `PC local prioritaire` ou `Render en secours`, ainsi que le profil, la resolution et la file de jobs.
-
-## Stack
-- FFmpeg : montage, analyse video et rendu ;
-- V8 Moment Ranker : mouvement, audio, cuts et payoff ;
-- V8 Director : simulations multi-strategies ;
-- Critic : controle qualite + revision ;
-- Ollama + Qwen2.5-VL 3B : vision locale facultative ;
-- PostgreSQL / Redis Render : controle, metadonnees et file de jobs ;
-- Studio HTTPS bootstrap : configuration locale sans copier les secrets de base de donnees.
+Le Studio affiche l'etat du worker et les informations utiles de profil, resolution et file de jobs.
 
 ## Securite
-Le mot de passe du Studio peut rester uniquement en memoire : laisse `STUDIO_PASSWORD=` vide dans `.env` et le lanceur le demandera a chaque demarrage. Les URL Postgres/Redis recues par HTTPS restent elles aussi uniquement dans l'environnement du processus et disparaissent lorsque la fenetre est fermee.
 
-Le worker initie uniquement des connexions sortantes ; aucun port entrant et aucune ouverture de routeur ne sont necessaires. `.gitignore` protege egalement `.env` et `.auto_profile.env` contre un commit accidentel.
+- l'agent local ecoute uniquement sur la boucle locale `127.0.0.1` ;
+- l'origine web autorisee est limitee au Studio officiel Render ;
+- le worker initie uniquement des connexions sortantes ;
+- aucun port du routeur n'a besoin d'etre ouvert ;
+- les jetons worker sont temporaires et renouvelables ;
+- `.gitignore` protege `.env` et `.auto_profile.env` contre un commit accidentel.
+
+Si tu lances manuellement `START_LOCAL_WORKER_WINDOWS.ps1` sans passer par le Studio, il peut demander le mot de passe du Studio afin d'obtenir lui-meme un jeton worker HTTPS. Le mot de passe n'est pas stocke par defaut.

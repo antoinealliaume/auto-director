@@ -40,8 +40,8 @@ Write-Host '=== Auto Director V9.1 Quality - installation / mise a jour du worke
 New-Item -ItemType Directory -Force -Path $InstallRoot|Out-Null
 $PythonExe=Resolve-RealPython
 if(-not $PythonExe){
-  Write-Host 'Python réel 3.12 absent. Installation automatique...' -ForegroundColor Yellow;$winget=Get-Command winget.exe -ErrorAction SilentlyContinue
-  if(-not $winget){throw 'Python 3.12 est requis et winget n est pas disponible sur ce PC.'}
+  Write-Host 'Python >= 3.10 absent. Installation automatique de Python 3.12...' -ForegroundColor Yellow;$winget=Get-Command winget.exe -ErrorAction SilentlyContinue
+  if(-not $winget){throw 'Python >= 3.10 est requis et winget n est pas disponible sur ce PC.'}
   $old=$ErrorActionPreference;$ErrorActionPreference='Continue';try{& $winget.Source install -e --id Python.Python.3.12 --scope user --accept-source-agreements --accept-package-agreements;$wingetCode=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
   if($wingetCode -ne 0 -and $wingetCode -ne -1978335189){throw 'Installation automatique de Python 3.12 impossible.'}
   $env:Path=[Environment]::GetEnvironmentVariable('Path','Machine')+';'+[Environment]::GetEnvironmentVariable('Path','User');Start-Sleep -Seconds 2;$PythonExe=Resolve-RealPython
@@ -50,11 +50,24 @@ if(-not $PythonExe){
 Write-Host "Python valide: $PythonExe" -ForegroundColor Green
 Stop-PreviousAutoDirector
 Write-Host 'Téléchargement de Auto Director V9.1 Quality...' -ForegroundColor Cyan
+try{Remove-Item $TempZip -Force -ErrorAction SilentlyContinue}catch{}
 Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing -Headers @{'Cache-Control'='no-cache'}
 if(Test-Path $TempExtract){Remove-Item $TempExtract -Recurse -Force};New-Item -ItemType Directory -Force -Path $TempExtract|Out-Null;Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 $Source=Join-Path $TempExtract 'auto-director-main';if(-not(Test-Path $Source)){throw 'Archive Auto Director invalide.'}
-if(Test-Path $RepoRoot){$Backup=Join-Path $InstallRoot 'repo.previous';if(Test-Path $Backup){Remove-Item $Backup -Recurse -Force};Move-Item $RepoRoot $Backup};Move-Item $Source $RepoRoot
-$Agent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1';$Runner=Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1';if(-not(Test-Path $Agent)){throw 'Agent local introuvable dans le package.'};if(-not(Test-Path $Runner)){throw 'Runner worker introuvable dans le package.'}
+$SourceAgent=Join-Path $Source 'self_hosted_worker\local_agent.ps1';$SourceRunner=Join-Path $Source 'self_hosted_worker\run_worker_logged.ps1'
+if(-not(Test-Path $SourceAgent)){throw 'Package Auto Director invalide : agent local absent.'}
+if(-not(Test-Path $SourceRunner)){throw 'Package Auto Director invalide : runner worker absent.'}
+$Backup=Join-Path $InstallRoot 'repo.previous'
+if(Test-Path $Backup){Remove-Item $Backup -Recurse -Force}
+try{
+  if(Test-Path $RepoRoot){Move-Item $RepoRoot $Backup}
+  Move-Item $Source $RepoRoot
+}catch{
+  try{if((-not(Test-Path $RepoRoot)) -and (Test-Path $Backup)){Move-Item $Backup $RepoRoot}}catch{}
+  throw
+}
+$Agent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1';$Runner=Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
+if(-not(Test-Path $Agent)){throw 'Agent local introuvable après installation.'};if(-not(Test-Path $Runner)){throw 'Runner worker introuvable après installation.'}
 [Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON',$PythonExe,'User');$env:AUTO_DIRECTOR_PYTHON=$PythonExe
 $StartupDir=[Environment]::GetFolderPath('Startup');$StartupCmd=Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd';$cmd="@echo off`r`nset `"AUTO_DIRECTOR_PYTHON=$PythonExe`"`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"`r`n";Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
 Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
