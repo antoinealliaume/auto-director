@@ -8,7 +8,7 @@ let loadingDashboard=false;
 const titles={studio:'Studio de création',pipeline:'Pipeline',gallery:'Galerie',intelligence:'Intelligence',learning:'Learning',publication:'Centre de publication'};
 const modeHints={auto:'V9.2 compare plusieurs stratégies et choisit celle avec le meilleur potentiel.',story:'Priorité à une progression claire et compréhensible.',funny:'Favorise les contrastes, réactions et ruptures de rythme.',highlight:'Place les moments les plus forts au centre du montage.',fast:'Cuts courts, énergie élevée et densité maximale.',clean:'Montage plus posé, lisible et chronologique.'};
 
-function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
+function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function toast(msg,type='ok'){const t=$('toast');if(!t)return console.log(msg);t.textContent=msg;t.className='toast show '+(type==='error'?'error':'');clearTimeout(t._timer);t._timer=setTimeout(()=>t.className='toast',3500)}
 function auth(){return {'Authorization':'Bearer '+token}}
 async function request(url,opts={}){opts.headers={...(opts.headers||{}),...auth()};opts.cache=opts.cache||'no-store';const r=await fetch(url,opts);let payload=null;try{payload=await r.json()}catch{payload=await r.text()}if(!r.ok){if(r.status===401){logout();throw Error('Session expirée. Reconnecte-toi.')}throw Error(payload?.detail||payload||`Erreur ${r.status}`)}return payload}
