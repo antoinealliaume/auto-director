@@ -10,7 +10,7 @@ from psycopg.types.json import Jsonb
 
 from storage_schema import ensure_storage_schema
 
-ENGINE_VERSION = '9.1'
+ENGINE_VERSION = '9.2'
 ANALYSIS_VERSION = 5
 REMOTE_WORKER_MODE = os.environ.get('REMOTE_WORKER_MODE','0') == '1'
 DATABASE_URL = os.environ.get('DATABASE_URL','')
