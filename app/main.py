@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Auto Director Studio API.
 
-V8.7 keeps PostgreSQL as the durable source of truth, Redis as the volatile
+V9.2 keeps PostgreSQL as the durable source of truth, Redis as the volatile
 queue/coordination layer, and attaches each production feature explicitly.
 """
 from contextlib import asynccontextmanager
@@ -25,8 +25,8 @@ from psycopg.types.json import Jsonb
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
 
-APP_VERSION = "8.7"
-ENGINE_VERSION = "8.7"
+APP_VERSION = "9.2"
+ENGINE_VERSION = "9.2"
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
 STUDIO_PASSWORD = os.environ.get("STUDIO_PASSWORD", "").strip()
@@ -224,7 +224,7 @@ def health():
         "configuration": config_ok,
         "version": APP_VERSION,
         "engine": ENGINE_VERSION,
-        "ai": "director-v8",
+        "ai": "director-v9.2-style",
         "maxUploadMb": MAX_UPLOAD_MB,
     }
 
