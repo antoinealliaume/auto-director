@@ -66,7 +66,7 @@ class V9RouteTests(unittest.TestCase):
 
     def test_api_version_metadata_is_v9_2_1(self):
         source=Path('app/main.py').read_text(encoding='utf-8')
-        self.assertIn('APP_VERSION = "9.2.2"',source)
+        self.assertIn('APP_VERSION = "9.2.3"',source)
         self.assertIn('ENGINE_VERSION = "9.2"',source)
         self.assertIn('"ai": "director-v9.2-style"',source)
         self.assertNotIn('V8.7 keeps PostgreSQL',source)

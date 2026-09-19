@@ -29,7 +29,7 @@ from .job_lifecycle import normalize_status
 from .manual_export import export_manifest
 from .structured_logging import log_event, reset_request_id, set_request_id
 
-APP_VERSION = "9.2.2"
+APP_VERSION = "9.2.3"
 ENGINE_VERSION = "9.2"
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
@@ -608,7 +608,7 @@ def manual_export(asset_id: str, authorization: Optional[str] = Header(None)):
     with db() as c:
         row = c.execute(
             """select a.name,a.size,a.created_at,coalesce(p.name,'Auto Director'),j.id,j.critic_score,j.strategy,
-                      coalesce(array_position(j.output_asset_ids,a.id),1)
+                      coalesce(array_position(j.output_asset_ids,a.id),1),a.checksum_sha256,a.metadata
                from assets a
                left join projects p on p.id=a.project_id
                left join jobs j on a.id=any(j.output_asset_ids)
@@ -618,10 +618,11 @@ def manual_export(asset_id: str, authorization: Optional[str] = Header(None)):
         ).fetchone()
     if not row:
         raise HTTPException(404, "Rendu introuvable")
-    name, size, created_at, project, job_id, score, strategy, variant = row
+    name, size, created_at, project, job_id, score, strategy, variant, checksum, metadata = row
     return export_manifest(
         asset_id=str(aid), project=project, source_name=name, size=size, created_at=created_at,
         job_id=str(job_id) if job_id else None, score=score, strategy=strategy, variant=variant,
+        checksum_sha256=checksum, metadata=metadata,
     )
 
 

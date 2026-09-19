@@ -15,7 +15,12 @@ def export_filename(project: str, variant: int, created_at: datetime | None = No
 
 
 def export_manifest(*, asset_id: str, project: str, source_name: str, size: int, created_at: datetime,
-                    job_id: str | None, score: float | None, strategy: str | None, variant: int) -> dict:
+                    job_id: str | None, score: float | None, strategy: str | None, variant: int,
+                    checksum_sha256: str | None = None, metadata: dict | None = None) -> dict:
+    details = metadata if isinstance(metadata, dict) else {}
+    resolution = details.get("resolution")
+    if not isinstance(resolution, list) or len(resolution) != 2:
+        resolution = None
     return {
         "assetId": asset_id,
         "filename": export_filename(project, variant, created_at),
@@ -25,6 +30,11 @@ def export_manifest(*, asset_id: str, project: str, source_name: str, size: int,
         "jobId": job_id,
         "score": score,
         "strategy": strategy or "",
+        "durationSeconds": details.get("duration"),
+        "resolution": resolution,
+        "fps": details.get("fps"),
+        "checksumSha256": checksum_sha256 or details.get("checksumSha256") or None,
+        "integrity": "checksum-available" if checksum_sha256 or details.get("checksumSha256") else "not-recorded",
         "status": "ready_for_manual_publication",
         "publicationMode": "manual-only",
         "downloadEndpoint": f"/api/assets/{asset_id}/download",

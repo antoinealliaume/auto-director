@@ -24,3 +24,5 @@
   text-transform: uppercase;
 }
 .export-filename { color: #8f99b1; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.export-details { color: #aab4c9; }
+.export-integrity { color: #72d7a6; font-size: 10px; }
