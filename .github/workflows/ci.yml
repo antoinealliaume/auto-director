@@ -27,6 +27,8 @@ jobs:
           for file in app/static/*.js; do
             node --check "$file"
           done
+      - name: Build static frontend (reference and policy smoke test)
+        run: python -m unittest tests.test_frontend_build -v
       - name: Validate PowerShell syntax
         shell: pwsh
         run: |
