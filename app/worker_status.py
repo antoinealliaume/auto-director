@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 import redis
+import psycopg
 from fastapi import Header, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -12,6 +13,8 @@ REDIS_URL = os.environ.get('REDIS_URL','')
 LOCAL_KEY = 'autodirector:worker:local:heartbeat'
 CLOUD_KEY = 'autodirector:worker:cloud:heartbeat'
 QUEUE_KEY = 'auto_director:jobs'
+DATABASE_URL = os.environ.get('DATABASE_URL','')
+from .job_lifecycle import worker_compatibility
 
 
 def _redis():
@@ -33,7 +36,14 @@ def worker_status_payload():
         try:depth=int(q.llen(QUEUE_KEY))
         except Exception:depth=None
         active=local or cloud;kind='local' if local else ('cloud' if cloud else None)
-        return {'ok':bool(active),'activeWorker':kind,'worker':active,'localWorkerOnline':bool(local),'cloudWorkerOnline':bool(cloud),'localWorker':local,'cloudWorker':cloud,'queueDepth':depth}
+        compatibility=worker_compatibility((active or {}).get('engine'),(active or {}).get('protocol')) if active else None
+        current=None
+        try:
+            with psycopg.connect(DATABASE_URL) as c:
+                row=c.execute("select id,status,stage,progress,message,updated_at from jobs where status in ('claimed','running') order by updated_at desc limit 1").fetchone()
+            if row:current={'id':str(row[0]),'status':row[1],'stage':row[2],'progress':row[3],'message':row[4],'updatedAt':row[5].isoformat()}
+        except Exception:pass
+        return {'ok':bool(active and compatibility and compatibility['compatible']),'api':'online','activeWorker':kind,'worker':active,'compatibility':compatibility,'currentJob':current,'localWorkerOnline':bool(local),'cloudWorkerOnline':bool(cloud),'localWorker':local,'cloudWorker':cloud,'queueDepth':depth}
     except Exception:
         return {'ok':False,'activeWorker':None,'worker':None,'localWorkerOnline':False,'cloudWorkerOnline':False,'localWorker':None,'cloudWorker':None,'queueDepth':None,'error':'queue-unavailable'}
 

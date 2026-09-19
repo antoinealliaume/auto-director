@@ -1,0 +1,75 @@
+from datetime import datetime, timedelta, timezone
+import json
+import logging
+import unittest
+from unittest.mock import patch
+
+from app.job_lifecycle import (
+    JOB_STATES,
+    can_transition,
+    claimable,
+    deadline_exceeded,
+    normalize_status,
+    recoverable,
+    retry_plan,
+    worker_compatibility,
+)
+from app.structured_logging import log_event, reset_request_id, set_request_id
+
+
+class JobLifecycleV2Tests(unittest.TestCase):
+    def test_required_states_and_legacy_done_migration(self):
+        self.assertEqual(JOB_STATES, {"queued", "claimed", "running", "completed", "failed", "cancelled"})
+        self.assertEqual(normalize_status("done"), "completed")
+
+    def test_transitions_are_explicit(self):
+        self.assertTrue(can_transition("queued", "claimed"))
+        self.assertTrue(can_transition("claimed", "running"))
+        self.assertTrue(can_transition("running", "completed"))
+        self.assertFalse(can_transition("completed", "running"))
+
+    def test_double_claim_guard(self):
+        self.assertTrue(claimable("queued"))
+        self.assertFalse(claimable("claimed"))
+        self.assertFalse(claimable("running"))
+
+    def test_timeout_and_restart_recovery(self):
+        now=datetime(2026,9,19,tzinfo=timezone.utc)
+        self.assertTrue(deadline_exceeded(now-timedelta(seconds=61),60,now=now))
+        self.assertTrue(recoverable("running",has_live_lease=False,age_seconds=60,timeout_seconds=60))
+        self.assertFalse(recoverable("running",has_live_lease=True,age_seconds=600,timeout_seconds=60))
+
+    def test_retry_backoff_is_bounded(self):
+        now=datetime(2026,9,19,tzinfo=timezone.utc)
+        first=retry_plan({},now=now)
+        second=retry_plan(first["settings"],now=now)
+        third=retry_plan(second["settings"],now=now)
+        self.assertEqual((first["delaySeconds"],second["delaySeconds"]),(15,30))
+        self.assertTrue(first["allowed"] and second["allowed"])
+        self.assertFalse(third["allowed"])
+
+    def test_worker_offline_or_incompatible(self):
+        self.assertFalse(worker_compatibility(None,None)["compatible"])
+        self.assertFalse(worker_compatibility("9.1",2)["compatible"])
+        self.assertFalse(worker_compatibility("9.2",1)["compatible"])
+        self.assertTrue(worker_compatibility("9.2",2)["compatible"])
+
+    def test_cancellation_is_terminal(self):
+        self.assertTrue(can_transition("running","cancelled"))
+        self.assertFalse(can_transition("cancelled","running"))
+
+    def test_structured_logs_correlate_request_and_job(self):
+        token=set_request_id('request-123')
+        try:
+            with patch('app.structured_logging.logger.log') as emit:
+                log_event('job.claimed',job_id='job-456')
+            payload=json.loads(emit.call_args.args[1])
+            self.assertEqual(payload['request_id'],'request-123')
+            self.assertEqual(payload['job_id'],'job-456')
+            self.assertEqual(emit.call_args.args[0],logging.INFO)
+        finally:
+            reset_request_id(token)
+
+
+if __name__ == "__main__":
+    unittest.main()

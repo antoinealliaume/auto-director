@@ -20,17 +20,26 @@ from psycopg.types.json import Jsonb
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
 from engine.memory import load_context
+from .job_lifecycle import WORKER_PROTOCOL, retry_plan, worker_compatibility
+from .structured_logging import log_event
 
 DATABASE_URL = os.environ.get('DATABASE_URL','')
 REDIS_URL = os.environ.get('REDIS_URL','')
 TOKEN_TTL = max(3600,min(7*24*3600,int(os.environ.get('WORKER_TOKEN_TTL','86400'))))
 QUEUE_KEY='auto_director:jobs'
+RETRY_KEY='auto_director:jobs:retry'
 LOCAL_HEARTBEAT='autodirector:worker:local:heartbeat'
 MAX_OUTPUT_MB=max(20,min(250,int(os.environ.get('MAX_REMOTE_OUTPUT_MB','120'))))
 
 
 def db(): return psycopg.connect(DATABASE_URL)
 def rq(): return redis.from_url(REDIS_URL,decode_responses=True)
+
+def _read_worker_info(client):
+    try:
+        value=json.loads(client.get(LOCAL_HEARTBEAT) or '{}')
+        return value if isinstance(value,dict) else None
+    except Exception:return None
 
 def secret():
     v=os.environ.get('TOKEN_SECRET','')
@@ -82,6 +91,7 @@ class SessionIn(BaseModel): label:str=Field(default='windows-pc',max_length=80)
 class HeartbeatIn(BaseModel):
     engine:str=Field(default='8.6',max_length=32);profile:str=Field(default='safe-unknown',max_length=80)
     resolution:list[int]=Field(default_factory=lambda:[720,1280]);fps:int=24;ffmpegThreads:int=2;localAI:bool=False;model:Optional[str]=None
+    protocol:int=WORKER_PROTOCOL;agentVersion:Optional[str]=Field(default=None,max_length=32)
 class ProgressIn(BaseModel):
     stage:str=Field(default='running',max_length=80);progress:int=0;message:str=Field(default='',max_length=500)
     score:Optional[float]=None;revision:Optional[int]=None;strategy:Optional[str]=None;brief:Optional[dict]=None
@@ -101,13 +111,17 @@ def attach(app):
 
     async def heartbeat(x:HeartbeatIn,authorization:Optional[str]=Header(None)):
         wid=require_worker(authorization);res=list(x.resolution or [720,1280]);w=int(res[0]) if len(res)>0 else 720;h=int(res[1]) if len(res)>1 else 1280
-        payload={'kind':'local','engine':x.engine,'profile':x.profile,'resolution':[max(480,min(1080,w)),max(854,min(1920,h))],
+        compatibility=worker_compatibility(x.engine,x.protocol)
+        payload={'kind':'local','engine':x.engine,'protocol':x.protocol,'agentVersion':x.agentVersion,'compatible':compatibility['compatible'],'compatibilityReason':compatibility['reason'],'profile':x.profile,'resolution':[max(480,min(1080,w)),max(854,min(1920,h))],
                  'fps':max(24,min(30,int(x.fps))),'ffmpegThreads':max(1,min(6,int(x.ffmpegThreads))),
                  'localAI':bool(x.localAI),'model':x.model if x.localAI else None,'workerId':wid,'updatedAt':int(time.time()),'transport':'https'}
-        rq().set(LOCAL_HEARTBEAT,json.dumps(payload),ex=20);return {'ok':True}
+        rq().set(LOCAL_HEARTBEAT,json.dumps(payload),ex=20);return {'ok':True,**compatibility}
 
     async def claim(authorization:Optional[str]=Header(None)):
         wid=require_worker(authorization);ensure_schema();selected=None;lock_key=None;r=rq()
+        worker_info=_read_worker_info(r)
+        compatibility=worker_compatibility((worker_info or {}).get('engine'),(worker_info or {}).get('protocol'))
+        if not compatibility['compatible']:raise HTTPException(409,'Worker incompatible: '+compatibility['reason'])
         with db() as c:
             c.execute('delete from worker_leases where lease_expires<=now()')
             rows=c.execute("select id,project_id,variants,settings from jobs where status='queued' order by created_at asc for update skip locked limit 10").fetchall()
@@ -115,10 +129,12 @@ def attach(app):
                 lk='autodirector:lock:'+str(row[0])
                 if r.set(lk,'remote:'+wid,nx=True,ex=3600):
                     selected=row;lock_key=lk
-                    c.execute("update jobs set status='running',stage='local_claim',progress=1,message='Pris par le worker PC',updated_at=now() where id=%s",(row[0],))
+                    claimed=c.execute("update jobs set status='claimed',stage='claimed',progress=1,message='Réservé par le worker PC',updated_at=now() where id=%s and status='queued' returning id",(row[0],)).fetchone()
+                    if not claimed:
+                        r.delete(lk);selected=None;lock_key=None;continue
                     c.execute("insert into worker_leases(job_id,worker_id,lease_expires) values(%s,%s,now()+interval '35 minutes') on conflict(job_id) do update set worker_id=excluded.worker_id,lease_expires=excluded.lease_expires,updated_at=now()",(row[0],wid));break
         if not selected:return {'job':None}
-        jid,pid,variants,settings=selected
+        jid,pid,variants,settings=selected;log_event('job.claimed',job_id=str(jid),worker_id=wid,transport='https')
         try:r.lrem(QUEUE_KEY,0,str(jid))
         except Exception:pass
         try:
@@ -157,7 +173,10 @@ def attach(app):
         if x.strategy is not None:sets.append('strategy=%s');vals.append(str(x.strategy)[:120])
         if x.brief is not None:sets.append('creative_brief=%s');vals.append(Jsonb(x.brief))
         vals.append(jid)
-        with db() as c:c.execute('update jobs set '+','.join(sets)+' where id=%s',vals);c.execute('insert into job_events(job_id,stage,message) values(%s,%s,%s)',(jid,x.stage,x.message[:500]))
+        with db() as c:
+            updated=c.execute("update jobs set "+','.join(sets)+" where id=%s and status in ('claimed','running') returning id",vals).fetchone()
+            if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')
+            c.execute('insert into job_events(job_id,stage,message) values(%s,%s,%s)',(jid,x.stage,x.message[:500]))
         return {'ok':True}
 
     async def state(job_id:str,authorization:Optional[str]=Header(None)):
@@ -190,7 +209,8 @@ def attach(app):
                 with db() as c:
                     ensure_storage_schema(c)
                     c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata,storage_key,storage_backend,checksum_sha256) values(%s,%s,%s,'video/mp4',%s,'render','render',%s,%s,%s,%s,%s)",(aid,pid,name,total,data,Jsonb(meta),storage_key,backend,checksum))
-                    c.execute("update jobs set output_asset_ids=array_append(output_asset_ids,%s),updated_at=now() where id=%s and not (%s=any(output_asset_ids))",(aid,jid,aid))
+                    updated=c.execute("update jobs set output_asset_ids=array_append(output_asset_ids,%s),updated_at=now() where id=%s and status in ('claimed','running') and not (%s=any(output_asset_ids)) returning id",(aid,jid,aid)).fetchone()
+                    if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')
             except Exception:
                 if storage_key:
                     try:media_store.delete(storage_key)
@@ -205,17 +225,25 @@ def attach(app):
     async def complete(job_id:str,x:CompleteIn,authorization:Optional[str]=Header(None)):
         wid=require_worker(authorization);jid=uuid.UUID(job_id);check_lease(jid,wid)
         with db() as c:
-            c.execute("update jobs set status='done',stage='complete',progress=100,message=%s,critic_score=%s,revision_count=%s,strategy=%s,updated_at=now() where id=%s",(x.message[:500],max(0,min(100,float(x.score))),max(0,int(x.revisionCount)),x.strategy[:120],jid));c.execute('delete from worker_leases where job_id=%s',(jid,))
+            updated=c.execute("update jobs set status='completed',stage='ready_for_manual_publication',progress=100,message='Rendu terminé · prêt pour publication manuelle',critic_score=%s,revision_count=%s,strategy=%s,updated_at=now() where id=%s and status in ('claimed','running') returning id",(max(0,min(100,float(x.score))),max(0,int(x.revisionCount)),x.strategy[:120],jid)).fetchone()
+            if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')
+            c.execute("insert into job_events(job_id,stage,message) values(%s,'ready_for_manual_publication','Fichier disponible ; aucune publication automatique')",(jid,));c.execute('delete from worker_leases where job_id=%s',(jid,))
         try:rq().delete('autodirector:lock:'+str(jid))
         except Exception:pass
-        return {'ok':True}
+        log_event('job.completed',job_id=str(jid),worker_id=wid,publication_mode='manual-only');return {'ok':True,'status':'completed','publicationMode':'manual-only'}
 
     async def fail(job_id:str,x:FailIn,authorization:Optional[str]=Header(None)):
-        wid=require_worker(authorization);jid=uuid.UUID(job_id);check_lease(jid,wid,False)
-        with db() as c:c.execute("update jobs set status='failed',stage='error',progress=0,message=%s,updated_at=now() where id=%s",(x.error[:500],jid));c.execute('delete from worker_leases where job_id=%s',(jid,))
+        wid=require_worker(authorization);jid=uuid.UUID(job_id);_,settings,_=check_lease(jid,wid,False);plan=retry_plan(settings)
+        with db() as c:
+            if plan['allowed']:
+                c.execute("update jobs set status='queued',stage='retry_wait',progress=0,message=%s,settings=%s,updated_at=now() where id=%s",(f"Nouvelle tentative {plan['attempt']}/2 dans {plan['delaySeconds']} s · {x.error[:300]}",Jsonb(plan['settings']),jid))
+                c.execute("insert into job_events(job_id,stage,message) values(%s,'retry_wait',%s)",(jid,f"Backoff {plan['delaySeconds']} s"))
+            else:c.execute("update jobs set status='failed',stage='error',progress=0,message=%s,updated_at=now() where id=%s",(x.error[:500],jid))
+            c.execute('delete from worker_leases where job_id=%s',(jid,))
+        if plan['allowed']:rq().zadd(RETRY_KEY,{str(jid):time.time()+plan['delaySeconds']})
         try:rq().delete('autodirector:lock:'+str(jid))
         except Exception:pass
-        return {'ok':True}
+        log_event('job.retry.scheduled' if plan['allowed'] else 'job.failed',job_id=str(jid),worker_id=wid,attempt=plan['attempt']);return {'ok':True,'retryScheduled':plan['allowed']}
 
     app.add_api_route('/api/local-worker/session',session,methods=['POST'],include_in_schema=False)
     app.add_api_route('/api/local-worker/renew',renew,methods=['POST'],include_in_schema=False)

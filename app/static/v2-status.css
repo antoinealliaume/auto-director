@@ -1,0 +1,13 @@
+.job-card:has(.badge.claimed):before { background: #55d8ff; }
+.job-card:has(.badge.completed):before { background: #3ed99a; }
+.badge.claimed { background: #24364d; color: #8fd8ff; }
+.badge.completed { background: #0e352a; color: #77e5b9; }
+.manual-ready {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid #235343;
+  background: #0e2a22;
+  border-radius: 10px;
+  color: #8de4bd;
+  font-size: 11px;
+}
