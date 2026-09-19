@@ -179,7 +179,9 @@ def _assemble_xfade(segments,plan,out):
     for x in segments:cmd+=['-i',str(x)]
     parts=[]
     for i in range(len(segments)):
-        parts.append(f'[{i}:v]fps={FPS},settb=1/{FPS},setpts=PTS-STARTPTS[v{i}]')
+        # setpts clears frame-rate metadata on FFmpeg versions used by imageio.
+        # Keep fps LAST so xfade sees a real CFR link instead of 1/0.
+        parts.append(f'[{i}:v]settb=AVTB,setpts=PTS-STARTPTS,fps={FPS}[v{i}]')
         parts.append(f'[{i}:a]aresample=async=1:first_pts=0,asetpts=PTS-STARTPTS[a{i}]')
     current=durations[0];vcur='v0';acur='a0';plan_segs=plan.get('segments') or []
     for i in range(len(segments)-1):
