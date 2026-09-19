@@ -1,5 +1,6 @@
 import os
 import unittest
+from pathlib import Path
 
 os.environ.setdefault('DATABASE_URL','postgresql://unused:unused@127.0.0.1:5432/unused')
 os.environ.setdefault('REDIS_URL','redis://127.0.0.1:6379/0')
@@ -57,6 +58,11 @@ class V9RouteTests(unittest.TestCase):
         from app.main import app
         paths={getattr(r,'path',None) for r in app.router.routes}
         self.assertIn('/api/v9/meta',paths)
+
+    def test_retry_does_not_write_null_critic_score(self):
+        source=Path('app/main.py').read_text(encoding='utf-8')
+        self.assertIn('critic_score=0',source)
+        self.assertNotIn('critic_score=null',source)
 
 
 if __name__=='__main__':
