@@ -4,6 +4,7 @@ import statistics
 
 from .memory import strategy_prior, preferred_pace
 from .quality import continuity_penalty, fit_segment, rhythm_duration, sequence_quality
+from .style_engine import decorate_plan
 
 STRATEGIES=('tease_payoff','escalation','speedrun','contrast','clean_story')
 MODE_STRATEGIES={
@@ -128,8 +129,6 @@ def make_plan(project,sources,style,profile,context,target,strategy,variant=0,re
         count=used_asset_counts.get(m['assetId'],0)
         if count>=3 and unique_assets>1:continue
         if segs and str(segs[-1]['assetId'])==str(m['assetId']) and unique_assets>1:
-            # Consecutive cuts from the same source often feel like an automatic
-            # montage unless the material is extremely limited.
             if i+1<len(pool*4):continue
         remaining=target-elapsed;desired=rhythm_duration(pace,elapsed,target,strategy,intensity)
         source=by_id.get(str(m['assetId']),{'duration':m.get('sourceDuration',0)})
@@ -157,7 +156,7 @@ def make_plan(project,sources,style,profile,context,target,strategy,variant=0,re
         if fit:segs[-1]=_segment(best,fit,float(segs[-1]['zoom']),'Voilà le moment')
     return {
         'hook':_hook(project,strategy,variant,hook_style),'strategy':strategy,'segments':segs,'pace':round(pace,2),
-        'source':'director-v9.1-quality','intensity':intensity,'hookStyle':hook_style,'qualityEngine':'shot-speech-beat-aware',
+        'source':'director-v9.2-style','intensity':intensity,'hookStyle':hook_style,'qualityEngine':'shot-speech-beat-style-aware',
     }
 
 
@@ -172,18 +171,19 @@ def predict(plan,style,context,target):
     prior=max(0,min(1,strategy_prior(context,plan.get('strategy',''))));sequence=sequence_quality(segs)
     score=100*(.22*first+.19*avg+.15*payoff+.10*diversity+.09*duration_fit+.07*pace_fit+.06*prior+.12*sequence)
     score=max(0,min(100,score))
-    breakdown={'first3s':round(first*100,1),'momentQuality':round(avg*100,1),'payoff':round(payoff*100,1),'diversity':round(diversity*100,1),'durationFit':round(duration_fit*100,1),'styleFit':round(pace_fit*100,1),'memoryPrior':round(prior*100,1),'sequenceQuality':round(sequence*100,1)}
+    breakdown={'first3s':round(first*100,1),'momentQuality':round(avg*100,1),'payoff':round(payoff*100,1),'diversity':round(diversity*100,1),'durationFit':round(duration_fit*100,1),'styleFit':round(pace_fit*100,1),'memoryPrior':round(prior*100,1),'sequenceQuality':round(sequence*100,1),'styleDiversity':round(float(plan.get('styleDiversity',0))*100,1)}
     return round(score,1),breakdown
 
 
-def choose_plan(project,sources,style,profile,context,target,variant=0,revision=0,mode='auto',intensity='balanced',hook_style='auto'):
+def choose_plan(project,sources,style,profile,context,target,variant=0,revision=0,mode='auto',intensity='balanced',hook_style='auto',visual_style='auto'):
     learned=preferred_pace(context);effective=dict(style)
     if learned:effective['pace']=round(.7*float(style.get('pace',2))+.3*learned,2)
     allowed=MODE_STRATEGIES.get(mode,STRATEGIES)
     candidates=[]
     for strategy in allowed:
         plan=make_plan(project,sources,effective,profile,context,target,strategy,variant,revision,intensity,hook_style)
+        plan=decorate_plan(plan,visual_style,mode,intensity,variant)
         score,why=predict(plan,effective,context,target);plan['predictedRetention']=score;plan['prediction']=why;plan['directorMode']=mode;candidates.append(plan)
     candidates.sort(key=lambda x:x['predictedRetention'],reverse=True)
     pick=min(max(0,int(variant)),len(candidates)-1);winner=candidates[pick]
-    return winner,[{'strategy':x['strategy'],'score':x['predictedRetention']} for x in candidates]
+    return winner,[{'strategy':x['strategy'],'score':x['predictedRetention'],'visualStyle':x.get('visualStyle')} for x in candidates]
