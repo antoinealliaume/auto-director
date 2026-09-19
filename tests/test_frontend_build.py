@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[1]
 class StaticFrontendBuildTests(unittest.TestCase):
     def test_every_local_static_reference_exists(self):
         html=(ROOT/'app/static/index.html').read_text(encoding='utf-8')
-        for name in ('app.js','secure-media.js','worker-status.js','publication.js','style.css','worker-status.css','publication.css','v2-status.css'):
+        for name in ('app.js','secure-media.js','worker-status.js','publication.js','style.css','worker-status.css','publication.css','v2-status.css','operator-experience.css'):
             self.assertIn('/static/'+name,html)
             self.assertTrue((ROOT/'app/static'/name).is_file(),name)
 
