@@ -13,10 +13,12 @@ REDIS_URL = os.environ.get('REDIS_URL','')
 LOCAL_KEY = 'autodirector:worker:local:heartbeat'
 CLOUD_KEY = 'autodirector:worker:cloud:heartbeat'
 QUEUE_KEY = 'auto_director:jobs'
+RETRY_KEY = 'auto_director:jobs:retry'
 DATABASE_URL = os.environ.get('DATABASE_URL','')
 EXPECTED_AGENT_VERSION = '2.8'
 INSTALLER_URL = '/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.8'
 from .job_lifecycle import worker_compatibility
+from .worker_diagnostics import diagnostic_state,with_heartbeat_age
 
 
 def _redis():
@@ -34,9 +36,11 @@ def _read(q,key):
 
 def worker_status_payload():
     try:
-        q=_redis();q.ping();local=_read(q,LOCAL_KEY);cloud=_read(q,CLOUD_KEY)
+        q=_redis();q.ping();local=with_heartbeat_age(_read(q,LOCAL_KEY));cloud=with_heartbeat_age(_read(q,CLOUD_KEY))
         try:depth=int(q.llen(QUEUE_KEY))
         except Exception:depth=None
+        try:retry_depth=int(q.zcard(RETRY_KEY))
+        except Exception:retry_depth=None
         active=local or cloud;kind='local' if local else ('cloud' if cloud else None)
         compatibility=worker_compatibility((active or {}).get('engine'),(active or {}).get('protocol')) if active else None
         current=None
@@ -45,9 +49,10 @@ def worker_status_payload():
                 row=c.execute("select id,status,stage,progress,message,updated_at from jobs where status in ('claimed','running') order by updated_at desc limit 1").fetchone()
             if row:current={'id':str(row[0]),'status':row[1],'stage':row[2],'progress':row[3],'message':row[4],'updatedAt':row[5].isoformat()}
         except Exception:pass
-        return {'ok':bool(active and compatibility and compatibility['compatible']),'api':'online','activeWorker':kind,'worker':active,'compatibility':compatibility,'currentJob':current,'localWorkerOnline':bool(local),'cloudWorkerOnline':bool(cloud),'localWorker':local,'cloudWorker':cloud,'queueDepth':depth,'workerUpdate':{'expectedAgentVersion':EXPECTED_AGENT_VERSION,'installerUrl':INSTALLER_URL,'automaticInstall':False},'publicationMode':'manual-only'}
+        diagnostic=diagnostic_state(active=active,compatibility=compatibility,queue_depth=depth,retry_depth=retry_depth,current_job=current)
+        return {'ok':bool(active and compatibility and compatibility['compatible']),'api':'online','activeWorker':kind,'worker':active,'compatibility':compatibility,'diagnostic':diagnostic,'currentJob':current,'localWorkerOnline':bool(local),'cloudWorkerOnline':bool(cloud),'localWorker':local,'cloudWorker':cloud,'queueDepth':depth,'retryDepth':retry_depth,'workerUpdate':{'expectedAgentVersion':EXPECTED_AGENT_VERSION,'installerUrl':INSTALLER_URL,'automaticInstall':False},'publicationMode':'manual-only'}
     except Exception:
-        return {'ok':False,'activeWorker':None,'worker':None,'localWorkerOnline':False,'cloudWorkerOnline':False,'localWorker':None,'cloudWorker':None,'queueDepth':None,'error':'queue-unavailable'}
+        return {'ok':False,'activeWorker':None,'worker':None,'localWorkerOnline':False,'cloudWorkerOnline':False,'localWorker':None,'cloudWorker':None,'queueDepth':None,'retryDepth':None,'diagnostic':{'level':'unavailable','message':'Diagnostics worker indisponibles.','queued':0,'delayedRetries':0},'workerUpdate':{'expectedAgentVersion':EXPECTED_AGENT_VERSION,'installerUrl':INSTALLER_URL,'automaticInstall':False},'publicationMode':'manual-only','error':'queue-unavailable'}
 
 
 def attach(app):
