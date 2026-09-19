@@ -29,7 +29,7 @@ from .job_lifecycle import normalize_status
 from .manual_export import export_manifest
 from .structured_logging import log_event, reset_request_id, set_request_id
 
-APP_VERSION = "9.2.3"
+APP_VERSION = "9.3.0"
 ENGINE_VERSION = "9.2"
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
