@@ -10,7 +10,7 @@ from pathlib import Path
 
 from psycopg.types.json import Jsonb
 
-from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,SELF_TEST,ensure_schema,recover_stale_jobs,FFMPEG_THREADS
+from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,SELF_TEST,ensure_schema,recover_stale_jobs,promote_due_retries,FFMPEG_THREADS
 from .job import process_job
 
 WORKER_KIND=os.environ.get('WORKER_KIND','cloud').strip().lower()
@@ -41,7 +41,7 @@ def self_test():
             c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,'selftest V8',1,%s)",(jid,pid,Jsonb(settings)))
         process_job(str(jid))
         with db() as c:row=c.execute('select status,critic_score,output_asset_ids from jobs where id=%s',(jid,)).fetchone()
-        ok=bool(row and row[0]=='done' and row[2])
+        ok=bool(row and row[0] in {'done','completed'} and row[2])
         print('SELFTEST V8 PASS '+str(row[:2]) if ok else 'SELFTEST V8 FAIL '+str(row),flush=True)
     except Exception as e:
         print('SELFTEST V8 FAIL '+repr(e),flush=True)
@@ -58,7 +58,7 @@ def heartbeat_payload():
         'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,
         'localAI':bool(LOCAL_VLM_URL) if WORKER_KIND=='local' else False,
         'model':LOCAL_VLM_MODEL if WORKER_KIND=='local' and LOCAL_VLM_URL else None,
-        'updatedAt':int(time.time()),
+        'updatedAt':int(time.time()),'protocol':2,
     }
 
 
@@ -135,6 +135,7 @@ def main():
     last_recovery=time.monotonic()
     while True:
         try:
+            promote_due_retries()
             if WORKER_KIND=='cloud' and time.monotonic()-last_recovery>=RECOVERY_SECONDS:
                 recover_stale_jobs();last_recovery=time.monotonic()
             jid=next_job()

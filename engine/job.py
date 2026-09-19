@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import gc
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -8,12 +9,13 @@ from psycopg.types.json import Jsonb
 
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
-from .config import db, queue, QUEUE_KEY, update_job, cancelled, save_asset_analysis, acquire_job_lock, release_job_lock, RENDER_WIDTH, RENDER_HEIGHT, MAX_REVISIONS, ENGINE_VERSION
+from .config import db, queue, QUEUE_KEY, update_job, cancelled, save_asset_analysis, acquire_job_lock, release_job_lock, claim_job, schedule_automatic_retry, JOB_TIMEOUT_SECONDS, RENDER_WIDTH, RENDER_HEIGHT, MAX_REVISIONS, ENGINE_VERSION
 from .analysis import analyze_asset, style_fingerprint, content_profile
 from .memory import load_context
 from .director import choose_plan
 from .rendering import render_plan, critic
 from .local_ai import enabled as local_ai_enabled, refine_plan, critic_video
+from app.structured_logging import log_event
 
 
 class JobCancelled(Exception):pass
@@ -53,14 +55,17 @@ def _requeue_if_still_queued(jid):
     except Exception:pass
 
 
-def _check_cancel(jid):
+def _check_cancel(jid, started=None):
     if cancelled(jid):raise JobCancelled()
+    if started is not None and time.monotonic()-started>JOB_TIMEOUT_SECONDS:raise TimeoutError(f'Job timeout after {JOB_TIMEOUT_SECONDS}s')
 
 
 def process_job(jid):
     if not acquire_job_lock(jid):
         _requeue_if_still_queued(jid);return
-    output_ids=[]
+    if not claim_job(jid):
+        release_job_lock(jid);return
+    output_ids=[];settings={};started=time.monotonic()
     try:
         with db() as c:
             row=c.execute('select project_id,variants,settings,status from jobs where id=%s',(jid,)).fetchone()
@@ -77,7 +82,7 @@ def process_job(jid):
         with tempfile.TemporaryDirectory(prefix='autodirector_v92_') as td:
             work=Path(td);paths={};sources=[];refs=[];all_rows=[('source',x) for x in sources_rows]+[('reference',x) for x in ref_rows]
             for index,(group,row) in enumerate(all_rows):
-                _check_cancel(jid)
+                _check_cancel(jid,started)
                 aid,name,role,meta=row;path=_load_asset_file(work,row,index);paths[str(aid)]=path
                 analysis,changed=analyze_asset(path,str(aid),name,role,meta)
                 if changed:save_asset_analysis(str(aid),meta,analysis)
@@ -90,14 +95,14 @@ def process_job(jid):
             update_job(jid,'running','director',20,f'V9.2 Director · mode {mode} · style {visual_style}',brief=brief)
             scores=[];total_revisions=0;last_strategy=''
             for variant in range(max(1,min(3,int(variants)))):
-                _check_cancel(jid)
+                _check_cancel(jid,started)
                 plan,simulations=choose_plan(brief['project'],sources,style,profile,context,target,variant,0,mode,intensity,hook_style,visual_style)
                 plan,local_plan_diag=refine_plan(brief['project'],plan,sources,paths,work)
                 last_strategy=plan['strategy'];brief_v={**brief,'selectedStrategy':plan['strategy'],'selectedVisualStyle':plan.get('visualStyle'),'styleDiversity':plan.get('styleDiversity'),'simulations':simulations,'predictedRetention':plan.get('predictedRetention'),'localAIDirector':local_plan_diag}
                 director_label='VLM local + V9.2' if local_ai_enabled() else 'Director V9.2'
                 update_job(jid,'running','director',23+variant*20,f"{director_label} · V{variant+1} · {plan['strategy']} · {plan.get('visualStyle','auto')} · {plan.get('predictedRetention',0)}/100",strategy=last_strategy,brief=brief_v)
                 initial=work/f'AutoDirector_V92_{variant+1}.mp4';render_plan(work,plan,paths,initial,captions,voice)
-                _check_cancel(jid)
+                _check_cancel(jid,started)
                 score,diag=critic(initial,target,plan);score,vlm_diag=critic_video(initial,score,plan,work);diag={**diag,'localVLM':vlm_diag}
                 final=initial;revision_count=0
                 if auto_revision and score<82 and MAX_REVISIONS>0:
@@ -105,7 +110,7 @@ def process_job(jid):
                     plan2,_=choose_plan(brief['project'],sources,style,profile,context,target,variant,1,mode,intensity,hook_style,visual_style)
                     plan2,local_plan_diag2=refine_plan(brief['project'],plan2,sources,paths,work)
                     revised=work/f'AutoDirector_V92_{variant+1}_R1.mp4';render_plan(work,plan2,paths,revised,captions,voice)
-                    _check_cancel(jid)
+                    _check_cancel(jid,started)
                     score2,diag2=critic(revised,target,plan2);score2,vlm_diag2=critic_video(revised,score2,plan2,work);diag2={**diag2,'localVLM':vlm_diag2,'localAIDirector':local_plan_diag2}
                     if score2>=score:final,plan,score,diag=revised,plan2,score2,diag2;revision_count=1;total_revisions+=1;last_strategy=plan['strategy']
                 aid=uuid.uuid4();storage_key=None
@@ -122,11 +127,19 @@ def process_job(jid):
                 if data is not None:del data
                 gc.collect();output_ids.append(aid);scores.append(score)
                 update_job(jid,'running','render',min(94,55+variant*16),f"Variante {variant+1} · {plan.get('visualStyle','auto')} · {score}/100",score=max(scores),revision=total_revisions,strategy=last_strategy)
-            with db() as c:c.execute("update jobs set status='done',stage='complete',progress=100,message='V9.2 terminé · galerie prête',output_asset_ids=%s,critic_score=%s,revision_count=%s,strategy=%s,updated_at=now() where id=%s",(output_ids,max(scores) if scores else 0,total_revisions,last_strategy,jid))
+            with db() as c:
+                completed=c.execute("update jobs set status='completed',stage='ready_for_manual_publication',progress=100,message='Rendu terminé · prêt pour publication manuelle',output_asset_ids=%s,critic_score=%s,revision_count=%s,strategy=%s,updated_at=now() where id=%s and status='running' returning id",(output_ids,max(scores) if scores else 0,total_revisions,last_strategy,jid)).fetchone()
+                if not completed:raise JobCancelled()
+                c.execute("insert into job_events(job_id,stage,message) values(%s,'ready_for_manual_publication','Fichier exporté localement ; aucune publication automatique')",(jid,))
+            log_event('job.completed',job_id=str(jid),duration_seconds=round(time.monotonic()-started,3),publication_mode='manual-only')
     except JobCancelled:
         _cleanup_outputs(output_ids);print('V9.2 JOB CANCELLED',jid,flush=True)
     except Exception as e:
-        _cleanup_outputs(output_ids);print('V9.2 JOB FAILED',jid,repr(e),flush=True)
-        try:update_job(jid,'failed','error',0,str(e)[:500])
-        except Exception:pass
+        _cleanup_outputs(output_ids);log_event('job.execution_error',job_id=str(jid),error_type=type(e).__name__,error=str(e)[:500])
+        try:
+            retried,_=schedule_automatic_retry(jid,settings,e)
+            if not retried:update_job(jid,'failed','error',0,str(e)[:500])
+        except Exception:
+            try:update_job(jid,'failed','error',0,str(e)[:500])
+            except Exception:pass
     finally:release_job_lock(jid)

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import subprocess
+import time
 import uuid
 
 import psycopg
@@ -9,6 +10,8 @@ from imageio_ffmpeg import get_ffmpeg_exe
 from psycopg.types.json import Jsonb
 
 from storage_schema import ensure_storage_schema
+from app.job_lifecycle import DEFAULT_JOB_TIMEOUT_SECONDS, retry_plan
+from app.structured_logging import log_event
 
 ENGINE_VERSION = '9.2'
 ANALYSIS_VERSION = 5
@@ -28,6 +31,8 @@ SELF_TEST = os.environ.get('SELF_TEST_ON_START','0') == '1'
 FFMPEG = get_ffmpeg_exe()
 queue = redis.from_url(REDIS_URL,decode_responses=True) if REDIS_URL else None
 QUEUE_KEY = 'auto_director:jobs'
+RETRY_KEY = 'auto_director:jobs:retry'
+JOB_TIMEOUT_SECONDS = max(300, min(4 * 3600, int(os.environ.get('JOB_TIMEOUT_SECONDS', str(DEFAULT_JOB_TIMEOUT_SECONDS)))))
 
 
 def db():
@@ -70,8 +75,20 @@ def update_job(jid,status,stage,progress,message,score=None,revision=None,strate
     if brief is not None:sets.append('creative_brief=%s');vals.append(Jsonb(brief))
     vals.append(jid)
     with db() as c:
-        c.execute('update jobs set '+','.join(sets)+' where id=%s',vals)
-        c.execute('insert into job_events(job_id,stage,message) values(%s,%s,%s)',(jid,stage,str(message)[:500]))
+        changed=c.execute("update jobs set "+','.join(sets)+" where id=%s and status not in ('completed','done','failed','cancelled') returning id",vals).fetchone()
+        if changed:c.execute('insert into job_events(job_id,stage,message) values(%s,%s,%s)',(jid,stage,str(message)[:500]))
+
+
+def claim_job(jid, worker_id='cloud'):
+    """Atomically move a queued job to claimed before any expensive work starts."""
+    if REMOTE_WORKER_MODE:return True
+    with db() as c:
+        row=c.execute("""update jobs set status='claimed',stage='claimed',progress=1,
+            message=%s,updated_at=now() where id=%s and status='queued' returning id""",
+            (f'Réservé par le worker {worker_id}',jid)).fetchone()
+        if row:c.execute("insert into job_events(job_id,stage,message) values(%s,'claimed',%s)",(jid,f'Claim atomique par {worker_id}'))
+    if row:log_event('job.claimed',job_id=str(jid),worker_id=worker_id)
+    return bool(row)
 
 
 def cancelled(jid):
@@ -108,6 +125,29 @@ def _enqueue_if_missing(jid):
     return False
 
 
+def schedule_automatic_retry(jid, settings, error):
+    plan=retry_plan(settings)
+    if not plan['allowed']:return False,plan
+    with db() as c:
+        changed=c.execute("""update jobs set status='queued',stage='retry_wait',progress=0,message=%s,
+            settings=%s,updated_at=now() where id=%s and status in ('claimed','running') returning id""",
+            (f"Nouvelle tentative {plan['attempt']}/{2} dans {plan['delaySeconds']} s · {str(error)[:300]}",Jsonb(plan['settings']),jid)).fetchone()
+        if not changed:return False,plan
+        c.execute("insert into job_events(job_id,stage,message) values(%s,'retry_wait',%s)",(jid,f"Backoff {plan['delaySeconds']} s"))
+    if queue is not None:queue.zadd(RETRY_KEY,{str(jid):time.time()+plan['delaySeconds']})
+    log_event('job.retry.scheduled',job_id=str(jid),attempt=plan['attempt'],delay_seconds=plan['delaySeconds'])
+    return True,plan
+
+
+def promote_due_retries():
+    if queue is None:return 0
+    due=queue.zrangebyscore(RETRY_KEY,0,time.time(),start=0,num=100)
+    promoted=0
+    for jid in due:
+        if queue.zrem(RETRY_KEY,jid) and _enqueue_if_missing(jid):promoted+=1
+    return promoted
+
+
 def recover_stale_jobs():
     """Rebuild the volatile Redis queue from PostgreSQL without stealing valid leases."""
     if REMOTE_WORKER_MODE or queue is None:return 0
@@ -117,17 +157,20 @@ def recover_stale_jobs():
         stale=c.execute("""
             select j.id from jobs j
             left join worker_leases l on l.job_id=j.id and l.lease_expires>now()
-            where j.status='running'
-              and j.updated_at < now()-interval '30 minutes'
+            where j.status in ('claimed','running')
+              and j.updated_at < now()-(%s * interval '1 second')
               and l.job_id is null
             order by j.updated_at asc limit 50
-        """).fetchall()
+        """,(JOB_TIMEOUT_SECONDS,)).fetchall()
         for (jid,) in stale:
             c.execute("update jobs set status='queued',stage='queued',message='Reprise automatique après interruption',progress=0,updated_at=now() where id=%s",(jid,))
             try:queue.delete('autodirector:lock:'+str(jid))
             except Exception:pass
             recovered.append(jid)
-        queued=c.execute("select id from jobs where status='queued' order by created_at asc limit 200").fetchall()
+        queued=c.execute("""select id from jobs where status='queued'
+            and (coalesce(settings->>'nextAttemptAt','') in ('','null')
+                 or (settings->>'nextAttemptAt')::timestamptz <= now())
+            order by created_at asc limit 200""").fetchall()
     for (jid,) in queued:
         try:queue.delete('autodirector:lock:'+str(jid))
         except Exception:pass
