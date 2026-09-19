@@ -11,3 +11,16 @@
   color: #8de4bd;
   font-size: 11px;
 }
+.manual-export-badge {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  border: 1px solid #235343;
+  border-radius: 999px;
+  background: #0e2a22;
+  color: #8de4bd;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.export-filename { color: #8f99b1; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
