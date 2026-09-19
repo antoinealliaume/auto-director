@@ -14,8 +14,9 @@ class VisualRefreshTests(unittest.TestCase):
     def test_refresh_stylesheet_is_loaded_last(self):
         styles = re.findall(r'<link rel="stylesheet" href="([^"]+)"', self.html)
         self.assertTrue(styles)
-        self.assertEqual(styles[-2], "/static/visual-refresh.css?v=9.4.0")
-        self.assertEqual(styles[-1], "/static/studio-polish.css?v=9.4.0")
+        self.assertEqual(styles[-3], "/static/visual-refresh.css?v=10.0.0")
+        self.assertEqual(styles[-2], "/static/studio-polish.css?v=10.0.0")
+        self.assertEqual(styles[-1], "/static/studio-v10.css?v=10.0.0")
 
     def test_refresh_covers_core_workspace_and_mobile_layout(self):
         for selector in (
