@@ -1,10 +1,10 @@
 $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
-$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.6'
+$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.7'
 $TempZip = Join-Path $env:TEMP 'auto-director-main.zip'
 $TempExtract = Join-Path $env:TEMP ('auto-director-install-' + [guid]::NewGuid().ToString('N'))
-$ExpectedAgentVersion = [version]'2.6'
+$ExpectedAgentVersion = [version]'2.7'
 $AgentStatusUrl = 'http://127.0.0.1:8765/status'
 $AgentStopUrl = 'http://127.0.0.1:8765/stop'
 
@@ -36,7 +36,7 @@ function Wait-ForAgent {
   if($lastVersion){throw "Ancien agent encore actif (version $lastVersion). Redémarre Windows puis relance cet installateur."};throw 'Le nouvel agent Auto Director ne répond pas sur le port local 8765.'
 }
 
-Write-Host '=== Auto Director V9.1 Quality - installation / mise a jour du worker PC ===' -ForegroundColor Cyan
+Write-Host '=== Auto Director V9.2 Style Engine - installation / mise a jour du worker PC ===' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallRoot|Out-Null
 $PythonExe=Resolve-RealPython
 if(-not $PythonExe){
@@ -49,7 +49,7 @@ if(-not $PythonExe){
 }
 Write-Host "Python valide: $PythonExe" -ForegroundColor Green
 Stop-PreviousAutoDirector
-Write-Host 'Téléchargement de Auto Director V9.1 Quality...' -ForegroundColor Cyan
+Write-Host 'Téléchargement de Auto Director V9.2 Style Engine...' -ForegroundColor Cyan
 try{Remove-Item $TempZip -Force -ErrorAction SilentlyContinue}catch{}
 Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing -Headers @{'Cache-Control'='no-cache'}
 if(Test-Path $TempExtract){Remove-Item $TempExtract -Recurse -Force};New-Item -ItemType Directory -Force -Path $TempExtract|Out-Null;Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
@@ -73,4 +73,4 @@ $StartupDir=[Environment]::GetFolderPath('Startup');$StartupCmd=Join-Path $Start
 Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
 $psi=New-Object System.Diagnostics.ProcessStartInfo;$psi.FileName='powershell.exe';$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"";$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe;$proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le nouvel agent.'};$status=Wait-ForAgent
 try{Remove-Item $TempZip -Force -ErrorAction SilentlyContinue}catch{};try{Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue}catch{}
-Write-Host '';Write-Host ("Installation V9.1 terminée. Agent PC version "+$status.agentVersion+" actif.") -ForegroundColor Green;Write-Host 'Le Quality Engine installera automatiquement ses composants au premier démarrage si ton PC le permet.' -ForegroundColor Green;Write-Host 'Retourne dans Auto Director puis clique sur Démarrer le worker PC.' -ForegroundColor Green;Write-Host 'Aucun secret PostgreSQL/Redis n est envoyé au PC.' -ForegroundColor DarkGray;Start-Sleep -Seconds 4
+Write-Host '';Write-Host ("Installation V9.2 terminée. Agent PC version "+$status.agentVersion+" actif.") -ForegroundColor Green;Write-Host 'Le Style Engine et le Quality Engine utiliseront automatiquement les composants disponibles sur ton PC.' -ForegroundColor Green;Write-Host 'Retourne dans Auto Director puis clique sur Démarrer le worker PC.' -ForegroundColor Green;Write-Host 'Aucun secret PostgreSQL/Redis n est envoyé au PC.' -ForegroundColor DarkGray;Start-Sleep -Seconds 4
