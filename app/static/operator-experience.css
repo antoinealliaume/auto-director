@@ -1,0 +1,64 @@
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid #55d8ff;
+  outline-offset: 2px;
+}
+
+.job-events {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #252f45;
+  border-radius: 13px;
+  background: #0a101b;
+}
+
+.job-event {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 10px;
+  position: relative;
+  padding: 6px 0 12px;
+}
+
+.job-event:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 17px;
+  bottom: -3px;
+  width: 1px;
+  background: #313b55;
+}
+
+.job-event > i {
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #7d68ef;
+  box-shadow: 0 0 10px #7057ed66;
+}
+
+.job-event b,
+.job-event span,
+.job-event time { display: block; }
+.job-event b { color: #dce1ef; font-size: 11px; text-transform: capitalize; }
+.job-event span { color: #9aa4bb; font-size: 11px; margin-top: 3px; }
+.job-event time { color: #667088; font-size: 9px; margin-top: 4px; }
+.job-event-loading, .job-event-error { color: #8f99b1; font-size: 11px; padding: 6px; }
+.job-event-error { color: #ff9eaf; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}

@@ -24,11 +24,12 @@ from psycopg.types.json import Jsonb
 
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
+from .job_history import serialize_events
 from .job_lifecycle import normalize_status
 from .manual_export import export_manifest
 from .structured_logging import log_event, reset_request_id, set_request_id
 
-APP_VERSION = "9.2.1"
+APP_VERSION = "9.2.2"
 ENGINE_VERSION = "9.2"
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
@@ -489,6 +490,29 @@ def retry_job(job_id: str, authorization: Optional[str] = Header(None)):
         pass
     log_event("job.retry.manual", job_id=str(jid))
     return {"ok": True}
+
+
+@app.get("/api/jobs/{job_id}/events")
+def job_events(job_id: str, authorization: Optional[str] = Header(None)):
+    """Return a bounded, chronological timeline for one job."""
+    require_auth(authorization)
+    jid = parse_uuid(job_id, "Job")
+    with db() as c:
+        job = c.execute("select status,stage,progress,updated_at from jobs where id=%s", (jid,)).fetchone()
+        if not job:
+            raise HTTPException(404, "Job introuvable")
+        rows = c.execute(
+            "select stage,message,created_at from job_events where job_id=%s order by created_at asc,id asc limit 200",
+            (jid,),
+        ).fetchall()
+    return {
+        "jobId": str(jid),
+        "status": normalize_status(job[0]),
+        "stage": job[1],
+        "progress": job[2],
+        "updatedAt": job[3].isoformat(),
+        "events": serialize_events(rows),
+    }
 
 
 class FeedbackIn(BaseModel):
