@@ -83,7 +83,7 @@ def _motion_crop(motion):
     if motion=='drift':
         return f"crop={W}:{H}:x='(iw-ow)/2+(iw-ow)*.20*sin(n/24)':y='(ih-oh)/2+(ih-oh)*.13*cos(n/31)'"
     if motion=='shake':
-        return f"crop={W}:{H}:x='(iw-ow)/2+min((iw-ow)/2\,7)*sin(n*1.65)':y='(ih-oh)/2+min((ih-oh)/2\,5)*cos(n*1.37)'"
+        return rf"crop={W}:{H}:x='(iw-ow)/2+min((iw-ow)/2\,7)*sin(n*1.65)':y='(ih-oh)/2+min((ih-oh)/2\,5)*cos(n*1.37)'"
     if motion=='push':
         return f"crop={W}:{H}:x='(iw-ow)/2+(iw-ow)*.05*sin(n/34)':y='(ih-oh)/2'"
     return f'crop={W}:{H}'
@@ -179,7 +179,7 @@ def _assemble_xfade(segments,plan,out):
     for x in segments:cmd+=['-i',str(x)]
     parts=[]
     for i in range(len(segments)):
-        parts.append(f'[{i}:v]settb=AVTB,setpts=PTS-STARTPTS[v{i}]')
+        parts.append(f'[{i}:v]fps={FPS},settb=1/{FPS},setpts=PTS-STARTPTS[v{i}]')
         parts.append(f'[{i}:a]aresample=async=1:first_pts=0,asetpts=PTS-STARTPTS[a{i}]')
     current=durations[0];vcur='v0';acur='a0';plan_segs=plan.get('segments') or []
     for i in range(len(segments)-1):
