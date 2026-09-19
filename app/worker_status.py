@@ -14,6 +14,8 @@ LOCAL_KEY = 'autodirector:worker:local:heartbeat'
 CLOUD_KEY = 'autodirector:worker:cloud:heartbeat'
 QUEUE_KEY = 'auto_director:jobs'
 DATABASE_URL = os.environ.get('DATABASE_URL','')
+EXPECTED_AGENT_VERSION = '2.8'
+INSTALLER_URL = '/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.8'
 from .job_lifecycle import worker_compatibility
 
 
@@ -43,7 +45,7 @@ def worker_status_payload():
                 row=c.execute("select id,status,stage,progress,message,updated_at from jobs where status in ('claimed','running') order by updated_at desc limit 1").fetchone()
             if row:current={'id':str(row[0]),'status':row[1],'stage':row[2],'progress':row[3],'message':row[4],'updatedAt':row[5].isoformat()}
         except Exception:pass
-        return {'ok':bool(active and compatibility and compatibility['compatible']),'api':'online','activeWorker':kind,'worker':active,'compatibility':compatibility,'currentJob':current,'localWorkerOnline':bool(local),'cloudWorkerOnline':bool(cloud),'localWorker':local,'cloudWorker':cloud,'queueDepth':depth}
+        return {'ok':bool(active and compatibility and compatibility['compatible']),'api':'online','activeWorker':kind,'worker':active,'compatibility':compatibility,'currentJob':current,'localWorkerOnline':bool(local),'cloudWorkerOnline':bool(cloud),'localWorker':local,'cloudWorker':cloud,'queueDepth':depth,'workerUpdate':{'expectedAgentVersion':EXPECTED_AGENT_VERSION,'installerUrl':INSTALLER_URL,'automaticInstall':False},'publicationMode':'manual-only'}
     except Exception:
         return {'ok':False,'activeWorker':None,'worker':None,'localWorkerOnline':False,'cloudWorkerOnline':False,'localWorker':None,'cloudWorker':None,'queueDepth':None,'error':'queue-unavailable'}
 

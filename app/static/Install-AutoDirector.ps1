@@ -1,10 +1,10 @@
 $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
 $RepoRoot = Join-Path $InstallRoot 'repo'
-$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.7'
+$ZipUrl = 'https://github.com/antoinealliaume/auto-director/archive/refs/heads/main.zip?v=2.8'
 $TempZip = Join-Path $env:TEMP 'auto-director-main.zip'
 $TempExtract = Join-Path $env:TEMP ('auto-director-install-' + [guid]::NewGuid().ToString('N'))
-$ExpectedAgentVersion = [version]'2.7'
+$ExpectedAgentVersion = [version]'2.8'
 $AgentStatusUrl = 'http://127.0.0.1:8765/status'
 $AgentStopUrl = 'http://127.0.0.1:8765/stop'
 

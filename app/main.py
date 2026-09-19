@@ -25,9 +25,10 @@ from psycopg.types.json import Jsonb
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
 from .job_lifecycle import normalize_status
+from .manual_export import export_manifest
 from .structured_logging import log_event, reset_request_id, set_request_id
 
-APP_VERSION = "9.2"
+APP_VERSION = "9.2.1"
 ENGINE_VERSION = "9.2"
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
@@ -39,6 +40,7 @@ TOKEN_TTL_SECONDS = max(3600, min(30 * 24 * 3600, int(os.environ.get("TOKEN_TTL_
 MAX_UPLOAD_MB = max(10, min(500, int(os.environ.get("MAX_UPLOAD_MB", "80"))))
 BASE_DIR = Path(__file__).resolve().parent
 QUEUE_KEY = "auto_director:jobs"
+RELEASE_COMMIT = os.environ.get("RENDER_GIT_COMMIT", "").strip()
 
 queue = redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -243,6 +245,9 @@ def health():
         "configuration": config_ok,
         "version": APP_VERSION,
         "engine": ENGINE_VERSION,
+        "releaseCommit": RELEASE_COMMIT[:12] or None,
+        "environment": "render" if os.environ.get("RENDER") == "true" else "local",
+        "publicationMode": "manual-only",
         "ai": "director-v9.2-style",
         "maxUploadMb": MAX_UPLOAD_MB,
     }
@@ -308,6 +313,8 @@ def dashboard(authorization: Optional[str] = Header(None)):
         feedback_count = c.execute("select count(*) from feedback").fetchone()[0]
     return {
         "version": APP_VERSION,
+        "releaseCommit": RELEASE_COMMIT[:12] or None,
+        "publicationMode": "manual-only",
         "projects": [serialize_row(x, ["id", "name", "description", "createdAt"]) for x in projects],
         "assets": [serialize_row(x, ["id", "projectId", "name", "contentType", "size", "role", "kind", "metadata", "createdAt"]) for x in assets],
         "jobs": [
@@ -567,6 +574,31 @@ def publication_pack(asset_id: str, authorization: Optional[str] = Header(None))
         "assetId": str(aid), "filename": filename, "caption": caption, "hashtags": tags,
         "cta": "Dis-moi ce que tu aurais fait 👇", "strategy": strategy, "score": score,
     }
+
+
+@app.get("/api/exports/{asset_id}")
+def manual_export(asset_id: str, authorization: Optional[str] = Header(None)):
+    """Describe an export without initiating any platform publication."""
+    require_auth(authorization)
+    aid = parse_uuid(asset_id, "Rendu")
+    with db() as c:
+        row = c.execute(
+            """select a.name,a.size,a.created_at,coalesce(p.name,'Auto Director'),j.id,j.critic_score,j.strategy,
+                      coalesce(array_position(j.output_asset_ids,a.id),1)
+               from assets a
+               left join projects p on p.id=a.project_id
+               left join jobs j on a.id=any(j.output_asset_ids)
+               where a.id=%s and a.kind='render'
+               order by j.updated_at desc nulls last limit 1""",
+            (aid,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "Rendu introuvable")
+    name, size, created_at, project, job_id, score, strategy, variant = row
+    return export_manifest(
+        asset_id=str(aid), project=project, source_name=name, size=size, created_at=created_at,
+        job_id=str(job_id) if job_id else None, score=score, strategy=strategy, variant=variant,
+    )
 
 
 from .security import attach as attach_security

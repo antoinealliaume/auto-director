@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$AgentVersion = '2.7'
+$AgentVersion = '2.8'
 $AllowedOrigin = 'https://auto-director-web.onrender.com'
 $Port = 8765
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'AutoDirector'
