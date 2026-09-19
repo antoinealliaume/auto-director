@@ -12,11 +12,11 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import psycopg
 import redis
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -24,6 +24,8 @@ from psycopg.types.json import Jsonb
 
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
+from .job_lifecycle import normalize_status
+from .structured_logging import log_event, reset_request_id, set_request_id
 
 APP_VERSION = "9.2"
 ENGINE_VERSION = "9.2"
@@ -198,6 +200,23 @@ app = FastAPI(title="Auto Director Studio", version=APP_VERSION, lifespan=lifesp
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    request_id = (request.headers.get("x-request-id") or uuid.uuid4().hex)[:80]
+    request_token = set_request_id(request_id)
+    try:
+        response = await call_next(request)
+    except Exception:
+        log_event("request.failed", request_id=request_id, method=request.method, path=request.url.path)
+        raise
+    else:
+        response.headers["X-Request-ID"] = request_id
+        log_event("request.completed", request_id=request_id, method=request.method, path=request.url.path, status=response.status_code)
+        return response
+    finally:
+        reset_request_id(request_token)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     return FileResponse(BASE_DIR / "static" / "index.html")
@@ -291,7 +310,10 @@ def dashboard(authorization: Optional[str] = Header(None)):
         "version": APP_VERSION,
         "projects": [serialize_row(x, ["id", "name", "description", "createdAt"]) for x in projects],
         "assets": [serialize_row(x, ["id", "projectId", "name", "contentType", "size", "role", "kind", "metadata", "createdAt"]) for x in assets],
-        "jobs": [serialize_row(x, ["id", "projectId", "status", "stage", "progress", "message", "variants", "outputAssetIds", "criticScore", "revisionCount", "strategy", "creativeBrief", "createdAt", "updatedAt"]) for x in jobs],
+        "jobs": [
+            {**serialize_row(x, ["id", "projectId", "status", "stage", "progress", "message", "variants", "outputAssetIds", "criticScore", "revisionCount", "strategy", "creativeBrief", "createdAt", "updatedAt"]), "status": normalize_status(x[2])}
+            for x in jobs
+        ],
         "trends": [serialize_row(x, ["id", "label", "sourceUrl", "notes", "createdAt"]) for x in trends],
         "feedbackCount": feedback_count,
     }
@@ -336,9 +358,13 @@ class JobIn(BaseModel):
     assetIds: list[str]
     variants: int = 1
     captions: bool = True
-    voiceover: str = "auto"
+    voiceover: Literal["auto", "on", "off"] = "auto"
     autoRevision: bool = True
     targetDuration: int = 18
+    directorMode: Literal["auto", "story", "funny", "highlight", "fast", "clean"] = "auto"
+    editIntensity: Literal["soft", "balanced", "aggressive"] = "balanced"
+    hookStyle: Literal["auto", "curiosity", "payoff", "direct"] = "auto"
+    visualStyle: Literal["auto", "viral", "cinematic", "kinetic", "clean", "retro", "glitch", "meme", "dreamy"] = "auto"
 
 
 @app.post("/api/jobs")
@@ -362,9 +388,15 @@ def create_job(x: JobIn, authorization: Optional[str] = Header(None)):
         settings = {
             "assetIds": [str(a) for a in ids],
             "captions": bool(x.captions),
-            "voiceover": x.voiceover if x.voiceover in {"auto", "on", "off"} else "auto",
+            "voiceover": x.voiceover,
             "autoRevision": bool(x.autoRevision),
             "targetDuration": max(8, min(35, int(x.targetDuration))),
+            "directorMode": x.directorMode,
+            "editIntensity": x.editIntensity,
+            "hookStyle": x.hookStyle,
+            "visualStyle": x.visualStyle,
+            "automaticAttempts": 0,
+            "publicationMode": "manual-only",
         }
         c.execute(
             "insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,%s,%s,%s)",
@@ -377,7 +409,8 @@ def create_job(x: JobIn, authorization: Optional[str] = Header(None)):
         queue_signalled = True
     except Exception:
         pass
-    return {"id": str(jid), "status": "queued", "durable": True, "queueSignalled": queue_signalled}
+    log_event("job.queued", job_id=str(jid), queue_signalled=queue_signalled)
+    return {"id": str(jid), "status": "queued", "durable": True, "queueSignalled": queue_signalled, "publicationMode": "manual-only"}
 
 
 def _clear_runtime_job_state(jid: uuid.UUID):
@@ -412,12 +445,13 @@ def cancel_job(job_id: str, authorization: Optional[str] = Header(None)):
     jid = parse_uuid(job_id, "Job")
     with db() as c:
         row = c.execute(
-            "update jobs set status='cancelled',stage='cancelled',message='Annulé',updated_at=now() where id=%s and status in ('queued','running') returning id",
+            "update jobs set status='cancelled',stage='cancelled',message='Annulé',updated_at=now() where id=%s and status in ('queued','claimed','running') returning id",
             (jid,),
         ).fetchone()
     if not row:
         raise HTTPException(409, "Ce job ne peut plus être annulé")
     _clear_runtime_job_state(jid)
+    log_event("job.cancelled", job_id=str(jid))
     return {"ok": True}
 
 
@@ -435,8 +469,9 @@ def retry_job(job_id: str, authorization: Optional[str] = Header(None)):
     _delete_job_outputs(jid)
     with db() as c:
         c.execute(
-            """update jobs set status='queued',stage='queued',progress=0,message='Relancé',
-               output_asset_ids='{}',critic_score=0,revision_count=0,strategy='',creative_brief='{}'::jsonb,updated_at=now()
+            """update jobs set status='queued',stage='queued',progress=0,message='Relancé manuellement',
+               output_asset_ids='{}',critic_score=0,revision_count=0,strategy='',creative_brief='{}'::jsonb,
+               settings=jsonb_set(settings-'nextAttemptAt','{automaticAttempts}','0'::jsonb,true),updated_at=now()
                where id=%s""",
             (jid,),
         )
@@ -445,6 +480,7 @@ def retry_job(job_id: str, authorization: Optional[str] = Header(None)):
         queue.lpush(QUEUE_KEY, str(jid))
     except Exception:
         pass
+    log_event("job.retry.manual", job_id=str(jid))
     return {"ok": True}
 
 
