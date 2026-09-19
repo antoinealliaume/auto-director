@@ -48,7 +48,7 @@ def renew_loop():
     while not STOP.wait(RENEW_SECONDS):
         if not renew_token():STOP.wait(60)
 
-def heartbeat_payload():return {'engine':ENGINE_VERSION,'profile':PROFILE_NAME,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,'localAI':bool(local_ai_enabled()),'model':MODEL if local_ai_enabled() else None}
+def heartbeat_payload():return {'engine':ENGINE_VERSION,'profile':PROFILE_NAME,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,'localAI':bool(local_ai_enabled()),'model':MODEL if local_ai_enabled() else None,'styleEngine':True}
 def heartbeat_loop():
     while not STOP.is_set():
         try:
@@ -91,9 +91,9 @@ def upload_output(jid,path,metadata):
 def process_remote_job(job):
     jid=job['id'];settings=job.get('settings') or {};variants=max(1,min(3,int(job.get('variants') or 1)));target=max(8,min(35,int(settings.get('targetDuration',18))))
     captions=bool(settings.get('captions',True));voice=settings.get('voiceover','auto');auto_revision=bool(settings.get('autoRevision',True));context=job.get('context') or {};project_name=job.get('projectName') or 'Auto Director'
-    mode=str(settings.get('directorMode','auto'));intensity=str(settings.get('editIntensity','balanced'));hook_style=str(settings.get('hookStyle','auto'))
+    mode=str(settings.get('directorMode','auto'));intensity=str(settings.get('editIntensity','balanced'));hook_style=str(settings.get('hookStyle','auto'));visual_style=str(settings.get('visualStyle','auto'))
     progress(jid,'download',3,'Worker PC · récupération sécurisée des rushs')
-    with tempfile.TemporaryDirectory(prefix='autodirector_pc_v9_') as td:
+    with tempfile.TemporaryDirectory(prefix='autodirector_pc_v92_') as td:
         work=Path(td);paths={};sources=[];refs=[];assets=job.get('assets') or []
         if not assets:raise RuntimeError('Aucun rush fourni au worker PC')
         with client(300) as c:
@@ -105,24 +105,24 @@ def process_remote_job(job):
                 progress(jid,'analysis',6+int(14*(i+1)/max(1,len(assets))),f"Analyse locale {i+1}/{len(assets)}")
         if not sources:raise RuntimeError('Aucun rush source exploitable')
         style=style_fingerprint(refs);profile=content_profile(sources)
-        brief={'engine':ENGINE_VERSION,'transport':'https-remote-worker','project':project_name,'targetDuration':target,'sourceCount':len(sources),'referenceCount':len(refs),'styleFingerprint':style,'contentProfile':profile,'performanceMemory':context.get('winningStrategies',[]),'localAI':local_ai_enabled(),'profileName':PROFILE_NAME,'directorMode':mode,'editIntensity':intensity,'hookStyle':hook_style}
-        progress(jid,'director',22,f'Director V9 · mode {mode} · simulation multi-plans',brief=brief)
+        brief={'engine':ENGINE_VERSION,'transport':'https-remote-worker','project':project_name,'targetDuration':target,'sourceCount':len(sources),'referenceCount':len(refs),'styleFingerprint':style,'contentProfile':profile,'performanceMemory':context.get('winningStrategies',[]),'localAI':local_ai_enabled(),'profileName':PROFILE_NAME,'directorMode':mode,'editIntensity':intensity,'hookStyle':hook_style,'visualStyle':visual_style}
+        progress(jid,'director',22,f'Director V9.2 · mode {mode} · style {visual_style}',brief=brief)
         scores=[];revisions=0;last_strategy=''
         for variant in range(variants):
             if is_cancelled(jid):raise RuntimeError('JOB_CANCELLED')
-            plan,simulations=choose_plan(project_name,sources,style,profile,context,target,variant,0,mode,intensity,hook_style);plan,local_diag=refine_plan(project_name,plan,sources,paths,work);last_strategy=plan['strategy']
-            brief_v={**brief,'selectedStrategy':last_strategy,'simulations':simulations,'predictedRetention':plan.get('predictedRetention'),'localAIDirector':local_diag}
-            progress(jid,'director',25+variant*18,f"Plan V9 {variant+1}/{variants} · {last_strategy}",strategy=last_strategy,brief=brief_v)
-            initial=work/f'AutoDirector_PC_V9_{variant+1}.mp4';render_plan(work,plan,paths,initial,captions,voice);score,diag=critic(initial,target,plan);score,vlm_diag=critic_video(initial,score,plan,work);diag={**diag,'localVLM':vlm_diag};final=initial;revision_count=0
+            plan,simulations=choose_plan(project_name,sources,style,profile,context,target,variant,0,mode,intensity,hook_style,visual_style);plan,local_diag=refine_plan(project_name,plan,sources,paths,work);last_strategy=plan['strategy']
+            brief_v={**brief,'selectedStrategy':last_strategy,'selectedVisualStyle':plan.get('visualStyle'),'styleDiversity':plan.get('styleDiversity'),'simulations':simulations,'predictedRetention':plan.get('predictedRetention'),'localAIDirector':local_diag}
+            progress(jid,'director',25+variant*18,f"Plan V9.2 {variant+1}/{variants} · {last_strategy} · {plan.get('visualStyle','auto')}",strategy=last_strategy,brief=brief_v)
+            initial=work/f'AutoDirector_PC_V92_{variant+1}.mp4';render_plan(work,plan,paths,initial,captions,voice);score,diag=critic(initial,target,plan);score,vlm_diag=critic_video(initial,score,plan,work);diag={**diag,'localVLM':vlm_diag};final=initial;revision_count=0
             if auto_revision and score<82 and MAX_REVISIONS>0:
-                progress(jid,'revision',min(88,50+variant*15),f'V9 Critic local · révision automatique · {score}/100')
-                plan2,_=choose_plan(project_name,sources,style,profile,context,target,variant,1,mode,intensity,hook_style);plan2,local_diag2=refine_plan(project_name,plan2,sources,paths,work);revised=work/f'AutoDirector_PC_V9_{variant+1}_R1.mp4';render_plan(work,plan2,paths,revised,captions,voice);score2,diag2=critic(revised,target,plan2);score2,vlm_diag2=critic_video(revised,score2,plan2,work);diag2={**diag2,'localVLM':vlm_diag2,'localAIDirector':local_diag2}
+                progress(jid,'revision',min(88,50+variant*15),f'V9.2 Critic local · révision automatique · {score}/100')
+                plan2,_=choose_plan(project_name,sources,style,profile,context,target,variant,1,mode,intensity,hook_style,visual_style);plan2,local_diag2=refine_plan(project_name,plan2,sources,paths,work);revised=work/f'AutoDirector_PC_V92_{variant+1}_R1.mp4';render_plan(work,plan2,paths,revised,captions,voice);score2,diag2=critic(revised,target,plan2);score2,vlm_diag2=critic_video(revised,score2,plan2,work);diag2={**diag2,'localVLM':vlm_diag2,'localAIDirector':local_diag2}
                 if score2>=score:final,plan,score,diag=revised,plan2,score2,diag2;revision_count=1;revisions+=1;last_strategy=plan['strategy']
-            meta={'engineVersion':ENGINE_VERSION,'worker':'pc-https','profile':PROFILE_NAME,'score':score,'duration':diag.get('duration'),'strategy':plan['strategy'],'hook':plan['hook'],'pace':plan.get('pace'),'predictedRetention':plan.get('predictedRetention'),'revisionCount':revision_count,'referenceCount':len(refs),'segmentCount':len(plan.get('segments',[])),'critic':diag,'styleFingerprint':style,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'localAI':local_ai_enabled(),'directorMode':mode,'editIntensity':intensity,'hookStyle':hook_style}
-            progress(jid,'upload',min(94,62+variant*14),f'Envoi sécurisé de la variante {variant+1}');upload_output(jid,final,meta);scores.append(float(score));gc.collect()
+            meta={'engineVersion':ENGINE_VERSION,'worker':'pc-https','profile':PROFILE_NAME,'score':score,'duration':diag.get('duration'),'strategy':plan['strategy'],'hook':plan['hook'],'pace':plan.get('pace'),'predictedRetention':plan.get('predictedRetention'),'revisionCount':revision_count,'referenceCount':len(refs),'segmentCount':len(plan.get('segments',[])),'critic':diag,'styleFingerprint':style,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'localAI':local_ai_enabled(),'directorMode':mode,'editIntensity':intensity,'hookStyle':hook_style,'visualStyle':plan.get('visualStyle',visual_style),'styleEngine':plan.get('styleEngine'),'styleDiversity':plan.get('styleDiversity')}
+            progress(jid,'upload',min(94,62+variant*14),f"Envoi sécurisé · {plan.get('visualStyle','auto')} · variante {variant+1}");upload_output(jid,final,meta);scores.append(float(score));gc.collect()
         with client(40) as c:
-            r=c.post(f'/api/local-worker/jobs/{jid}/complete',json={'score':max(scores) if scores else 0,'revisionCount':revisions,'strategy':last_strategy,'message':'V9 PC terminé · galerie prête'});r.raise_for_status()
-        print(f'Job V9 {jid} terminé sur le PC · score {max(scores) if scores else 0}',flush=True)
+            r=c.post(f'/api/local-worker/jobs/{jid}/complete',json={'score':max(scores) if scores else 0,'revisionCount':revisions,'strategy':last_strategy,'message':'V9.2 PC terminé · galerie prête'});r.raise_for_status()
+        print(f'Job V9.2 {jid} terminé sur le PC · score {max(scores) if scores else 0}',flush=True)
 
 def claim_job():
     with client(40) as c:
@@ -139,7 +139,7 @@ def fail_job(jid,error):
     except Exception:pass
 
 def main():
-    print(f'Auto Director PC HTTPS V{ENGINE_VERSION} · {RENDER_WIDTH}x{RENDER_HEIGHT}@{RENDER_FPS} · {PROFILE_NAME}',flush=True)
+    print(f'Auto Director PC HTTPS V{ENGINE_VERSION} · {RENDER_WIDTH}x{RENDER_HEIGHT}@{RENDER_FPS} · {PROFILE_NAME} · Style Engine',flush=True)
     threading.Thread(target=heartbeat_loop,daemon=True).start();threading.Thread(target=renew_loop,daemon=True).start();time.sleep(1.2)
     while not STOP.is_set():
         jid=None
