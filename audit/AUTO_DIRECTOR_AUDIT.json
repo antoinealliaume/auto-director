@@ -1,0 +1,114 @@
+{
+  "generatedAt": "2026-09-19T14:09:36+00:00",
+  "repository": "antoinealliaume/auto-director",
+  "commit": "202be9c6ff96611e5e52e57dba45f9ec56b1f28c",
+  "status": "CRITICAL",
+  "counts": {
+    "critical": 1,
+    "warning": 1,
+    "info": 0
+  },
+  "failedChecks": 1,
+  "checks": [
+    {
+      "name": "Python compileall",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "Core unit tests",
+      "ok": true,
+      "code": 0,
+      "output": "Queue recovery: 1 durable job(s) available\n\ntest_8gb_stays_light (test_adaptive_profile.AdaptiveProfileTests.test_8gb_stays_light) ... ok\ntest_local_ai_requires_real_margin (test_adaptive_profile.AdaptiveProfileTests.test_local_ai_requires_real_margin) ... ok\ntest_never_auto_enables_1080p (test_adaptive_profile.AdaptiveProfileTests.test_never_auto_enables_1080p) ... ok\ntest_ram_without_gpu_does_not_force_vlm (test_adaptive_profile.AdaptiveProfileTests.test_ram_without_gpu_does_not_force_vlm) ... ok\ntest_unknown_machine_fails_safe (test_adaptive_profile.AdaptiveProfileTests.test_unknown_machine_fails_safe) ... ok\ntest_director_returns_bounded_plan (test_core.DirectorTests.test_director_returns_bounded_plan) ... ok\ntest_gpu_machine_never_exceeds_safe_limits (test_core.ProfileTests.test_gpu_machine_never_exceeds_safe_limits) ... ok\ntest_midrange_machine_stays_conservative (test_core.ProfileTests.test_midrange_machine_stays_conservative) ... ok\ntest_unknown_machine_is_minimal (test_core.ProfileTests.test_unknown_machine_is_minimal) ... ok\ntest_plan_carries_smart_crop_and_never_overruns_source (test_quality.DirectorQualityTests.test_plan_carries_smart_crop_and_never_overruns_source) ... ok\ntest_hook_is_faster_than_body (test_quality.QualityHelpersTests.test_hook_is_faster_than_body) ... ok\ntest_repeated_source_scores_lower (test_quality.QualityHelpersTests.test_repeated_source_scores_lower) ... ok\ntest_shots_from_cuts_builds_natural_intervals (test_quality.QualityHelpersTests.test_shots_from_cuts_builds_natural_intervals) ... ok\ntest_story_segment_prefers_speech_end (test_quality.QualityHelpersTests.test_story_segment_prefers_speech_end) ... ok\ntest_queued_job_clears_stale_lock_before_requeue (test_queue_recovery.QueueRecoveryTests.test_queued_job_clears_stale_lock_before_requeue) ... ok\ntest_database_fallback_is_default (test_storage.StorageTests.test_database_fallback_is_default) ... ok\ntest_key_is_private_and_sanitized (test_storage.StorageTests.test_key_is_private_and_sanitized) ... ok\ntest_s3_mode_round_trip_and_range (test_storage.StorageTests.test_s3_mode_round_trip_and_range) ... ok\ntest_aggressive_style_keeps_render_values_bounded (test_style_engine.StyleEngineTests.test_aggressive_style_keeps_render_values_bounded) ... ok\ntest_auto_varies_styles_across_variants (test_style_engine.StyleEngineTests.test_auto_varies_styles_across_variants) ... ok\ntest_explicit_style_is_respected (test_style_engine.StyleEngineTests.test_explicit_style_is_respected) ... ok\ntest_public_styles_have_presets (test_style_engine.StyleEngineTests.test_public_styles_have_presets) ... ok\ntest_soft_intensity_bounds_speed_and_effects (test_style_engine.StyleEngineTests.test_soft_intensity_bounds_speed_and_effects) ... ok\ntest_unknown_style_falls_back_to_auto (test_style_engine.StyleEngineTests.test_unknown_style_falls_back_to_auto) ... ok\ntest_styled_segment_executes_in_ffmpeg (test_style_rendering.StyleRenderingSmokeTests.test_styled_segment_executes_in_ffmpeg) ... ok\ntest_transition_chain_executes_when_supported (test_style_rendering.StyleRenderingSmokeTests.test_transition_chain_executes_when_supported) ... ok\ntest_pull_token_is_asset_scoped (test_tiktok_security.TikTokSecurityTests.test_pull_token_is_asset_scoped) ... ok\ntest_token_encryption_round_trip (test_tiktok_security.TikTokSecurityTests.test_token_encryption_round_trip) ... ok\ntest_utf16_title_limit_handles_emoji (test_tiktok_security.TikTokSecurityTests.test_utf16_title_limit_handles_emoji) ... ok\ntest_aggressive_intensity_has_shorter_pace (test_v9_director.V9DirectorTests.test_aggressive_intensity_has_shorter_pace) ... ok\ntest_direct_hook_is_not_silent_fallback (test_v9_director.V9DirectorTests.test_direct_hook_is_not_silent_fallback) ... ok\ntest_segments_never_overrun_source (test_v9_director.V9DirectorTests.test_segments_never_overrun_source) ... ok\ntest_story_mode_restricts_strategy_family (test_v9_director.V9DirectorTests.test_story_mode_restricts_strategy_family) ... ok\ntest_single_post_jobs_route (test_v9_director.V9RouteTests.test_single_post_jobs_route) ... ok\ntest_v9_meta_route_exists (test_v9_director.V9RouteTests.test_v9_meta_route_exists) ... ok\n\n----------------------------------------------------------------------\nRan 35 tests in 0.999s\n\nOK"
+    },
+    {
+      "name": "pip dependency consistency",
+      "ok": true,
+      "code": 0,
+      "output": "No broken requirements found."
+    },
+    {
+      "name": "JS syntax: app.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: publication.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: secure-media.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: worker-status.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: app/static/Install-AutoDirector.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: self_hosted_worker/START_LOCAL_WORKER_WINDOWS.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: self_hosted_worker/local_agent.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: self_hosted_worker/run_worker_logged.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "Ruff fatal/static errors",
+      "ok": true,
+      "code": 0,
+      "output": "All checks passed!"
+    },
+    {
+      "name": "Dependency vulnerability audit",
+      "ok": false,
+      "code": 1,
+      "output": "Name             Version ID                  Fix Versions\n---------------- ------- ------------------- ------------\npython-multipart 0.0.20  PYSEC-2026-1852     0.0.22\npython-multipart 0.0.20  PYSEC-2026-3038     0.0.26\npython-multipart 0.0.20  PYSEC-2026-3039     0.0.27\npython-multipart 0.0.20  PYSEC-2026-3040     0.0.31\npython-multipart 0.0.20  PYSEC-2026-3036     0.0.30\npython-multipart 0.0.20  PYSEC-2026-3037     0.0.30\npython-multipart 0.0.20  PYSEC-2026-1852     0.0.22\npython-multipart 0.0.20  PYSEC-2026-3038     0.0.26\npython-multipart 0.0.20  PYSEC-2026-3037     0.0.30\npython-multipart 0.0.20  PYSEC-2026-3036     0.0.30\npython-multipart 0.0.20  PYSEC-2026-3040     0.0.31\npython-multipart 0.0.20  PYSEC-2026-3039     0.0.27\ncryptography     46.0.7  PYSEC-2026-3554     49.0.0\ncryptography     46.0.7  PYSEC-2026-3552     50.0.0\ncryptography     46.0.7  PYSEC-2026-3553     49.0.0\ncryptography     46.0.7  PYSEC-2026-3552     50.0.0\ncryptography     46.0.7  PYSEC-2026-3553     49.0.0\ncryptography     46.0.7  PYSEC-2026-3554     49.0.0\ncryptography     46.0.7  GHSA-537c-gmf6-5ccf 48.0.1\nstarlette        0.47.3  PYSEC-2026-1942     0.49.1\nstarlette        0.47.3  PYSEC-2026-161      1.0.1\nstarlette        0.47.3  PYSEC-2026-161      1.0.1\nstarlette        0.47.3  PYSEC-2026-2281     1.1.0\nstarlette        0.47.3  PYSEC-2026-2280     1.1.0\nstarlette        0.47.3  PYSEC-2026-249      1.3.1\nstarlette        0.47.3  PYSEC-2026-248      1.3.0\nstarlette        0.47.3  PYSEC-2026-249      1.3.1\nstarlette        0.47.3  PYSEC-2026-248      1.3.0\nstarlette        0.47.3  PYSEC-2026-1942     0.49.1\nstarlette        0.47.3  PYSEC-2026-2281     1.1.0\nstarlette        0.47.3  PYSEC-2026-2280     1.1.0\n\nFound 31 known vulnerabilities in 3 packages"
+    },
+    {
+      "name": "Worker installer version alignment",
+      "ok": true,
+      "code": 0,
+      "output": "{\"agent\": \"2.7\", \"expected\": \"2.7\", \"zip_cache\": \"2.7\", \"bat_cache\": \"2.7\", \"bat_banner\": \"2.7\"}"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "checks",
+      "title": "Échec: Dependency vulnerability audit",
+      "detail": "Name             Version ID                  Fix Versions\n---------------- ------- ------------------- ------------\npython-multipart 0.0.20  PYSEC-2026-1852     0.0.22\npython-multipart 0.0.20  PYSEC-2026-3038     0.0.26\npython-multipart 0.0.20  PYSEC-2026-3039     0.0.27\npython-multipart 0.0.20  PYSEC-2026-3040     0.0.31\npython-multipart 0.0.20  PYSEC-2026-3036     0.0.30\npython-multipart 0.0.20  PYSEC-2026-3037     0.0.30\npython-multipart 0.0.20  PYSEC-2026-1852     0.0.22\npython-multipart 0.0.20  PYSEC-2026-3038     0.0.26\npython-multipart 0.0.20  PYSEC-2026-3037     0.0.30\npython-multipart 0.0.20  PYSEC-2026-3036     0.0.30\npython-multipart 0.0.20  PYSEC-2026-3040     0.0.31\npython-multipart 0.0.20  PYSEC-2026-3039     0.0.27\ncryptography     46.0.7  PYSEC-2026-3554     49.0.0\ncryptography     46.0.7  PYSEC-2026-3552     50.0.0\ncryptography     46.0.7  PYSEC-2026-3553     49.0.0\ncryptography     46.0.7  PYSEC-2026-3552     50.0.0\ncryptography     46.0.7  PYSEC-2026-3553     49.0.0\ncryptography     46.0.7  PYSEC-2026-3554     49.0.0\ncryptography     46.0.7  GHSA-537c-gmf6-5ccf 48.0.1\nstarlette        0.47.3  PYSEC-2026-1942     0.49.1\nstarlette        0.47.3  PYSEC-2026-161      1.0.1\nstarlette        0.47.3  PYSEC-2026-161      1.0.1\nstarlette        0.47.3  PYSEC-2026-2281     1.1.0\nstarlette        0.47.3  PYSEC-2026-2280     1.1.0\nstarlette        0.47.3  PYSEC-2026-249      1.3.1\nstarlette        0.47.3  PYSEC-2026-248      1.3.0\nstarlette        0.47.3  PYSEC-2026-249      1.3.1\nstarlette        0.47.3  PYSEC-2026-248      1.3.0\nstarlette        0.47.3  PYSEC-2026-1942     0.49.1\nstarlette        0.47.3  PYSEC-2026-2281     1.1.0\nstarlette        0.47.3  PYSEC-2026-2280     1.1.0\n\nFound 31 known vulnerabilities in 3 packages",
+      "suggestion": "Corriger avant toute fusion vers main."
+    },
+    {
+      "severity": "warning",
+      "category": "maintenance",
+      "title": "Artefacts legacy présents",
+      "detail": "app/main.py.new\napp/main_v7.py\napp/ACTIVATE_V7_NOW\napp/README_V7_SWITCH.txt\napp/STOP_PLACEHOLDER\napp/activate_v7.txt",
+      "suggestion": "Vérifier qu'ils ne sont plus référencés puis les supprimer dans une PR dédiée si sûrs."
+    }
+  ]
+}
