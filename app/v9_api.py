@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 DIRECTOR_MODES={"auto","story","funny","highlight","fast","clean"}
 EDIT_INTENSITIES={"soft","balanced","aggressive"}
 HOOK_STYLES={"auto","curiosity","payoff","direct"}
+VISUAL_STYLES={"auto","viral","cinematic","kinetic","clean","retro","glitch","meme","dreamy"}
 
 class V9JobIn(BaseModel):
     projectId:str
@@ -22,12 +23,13 @@ class V9JobIn(BaseModel):
     directorMode:str="auto"
     editIntensity:str="balanced"
     hookStyle:str="auto"
+    visualStyle:str="auto"
 
 
 def attach(app):
     try:
         from . import main as main_module
-        main_module.APP_VERSION='9.1';main_module.ENGINE_VERSION='9.1';app.version='9.1'
+        main_module.APP_VERSION='9.2';main_module.ENGINE_VERSION='9.2';app.version='9.2'
     except Exception:
         pass
 
@@ -41,11 +43,12 @@ def attach(app):
         from .main import require_auth
         require_auth(authorization)
         return {
-            'version':'9.1','engine':'director-v9.1-quality',
+            'version':'9.2','engine':'director-v9.2-style',
             'directorModes':sorted(DIRECTOR_MODES),
             'editIntensities':sorted(EDIT_INTENSITIES),
             'hookStyles':sorted(HOOK_STYLES),
-            'qualityEngine':True,
+            'visualStyles':sorted(VISUAL_STYLES),
+            'qualityEngine':True,'styleEngine':True,
         }
 
     def _create(x:V9JobIn,authorization:Optional[str]):
@@ -58,6 +61,7 @@ def attach(app):
         mode=x.directorMode if x.directorMode in DIRECTOR_MODES else 'auto'
         intensity=x.editIntensity if x.editIntensity in EDIT_INTENSITIES else 'balanced'
         hook=x.hookStyle if x.hookStyle in HOOK_STYLES else 'auto'
+        visual=x.visualStyle if x.visualStyle in VISUAL_STYLES else 'auto'
         voice=x.voiceover if x.voiceover in {'auto','on','off'} else 'auto'
         jid=uuid.uuid4()
         with db() as c:
@@ -68,14 +72,14 @@ def attach(app):
                 'assetIds':[str(a) for a in ids],
                 'captions':bool(x.captions),'voiceover':voice,'autoRevision':bool(x.autoRevision),
                 'targetDuration':max(8,min(35,int(x.targetDuration))),
-                'directorMode':mode,'editIntensity':intensity,'hookStyle':hook,'studioVersion':'9.1',
+                'directorMode':mode,'editIntensity':intensity,'hookStyle':hook,'visualStyle':visual,'studioVersion':'9.2',
             }
-            c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,%s,%s,%s)",(jid,pid,'V9.1 Quality accepté · en attente du worker',max(1,min(3,int(x.variants))),Jsonb(settings)))
-            c.execute("insert into job_events(job_id,stage,message) values(%s,'queued',%s)",(jid,f'Job V9.1 créé · mode {mode} · intensité {intensity}'))
+            c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,%s,%s,%s)",(jid,pid,'V9.2 Style accepté · en attente du worker',max(1,min(3,int(x.variants))),Jsonb(settings)))
+            c.execute("insert into job_events(job_id,stage,message) values(%s,'queued',%s)",(jid,f'Job V9.2 créé · mode {mode} · style {visual} · intensité {intensity}'))
         signalled=False
         try:queue.lpush(QUEUE_KEY,str(jid));signalled=True
         except Exception:pass
-        return {'id':str(jid),'status':'queued','version':'9.1','directorMode':mode,'queueSignalled':signalled}
+        return {'id':str(jid),'status':'queued','version':'9.2','directorMode':mode,'visualStyle':visual,'queueSignalled':signalled}
 
     @app.post('/api/jobs',include_in_schema=False)
     def create_job(x:V9JobIn,authorization:Optional[str]=Header(None)):
