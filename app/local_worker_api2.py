@@ -150,7 +150,9 @@ def attach(app):
         except Exception:
             try:r.delete(lock_key)
             except Exception:pass
-            with db() as c:c.execute("update jobs set status='queued',stage='queued',message='Replacé en file après erreur de claim',updated_at=now() where id=%s",(jid,));c.execute('delete from worker_leases where job_id=%s',(jid,))
+            with db() as c:
+                c.execute("update jobs set status='queued',stage='queued',message='Replacé en file après erreur de claim',updated_at=now() where id=%s and status='claimed'",(jid,))
+                c.execute('delete from worker_leases where job_id=%s',(jid,))
             raise
 
     async def asset(asset_id:str,jobId:str=Query(...),authorization:Optional[str]=Header(None)):
