@@ -81,6 +81,17 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertIn("http_worker_v2\\.py", stop_body)
         self.assertIn("taskkill.exe /PID $p.ProcessId /T /F", stop_body)
 
+        wait_after_kill = stop_body.index("Start-Sleep -Milliseconds 900")
+        verify_remaining = stop_body.index("$remaining=Get-CimInstance Win32_Process -ErrorAction Stop", wait_after_kill)
+        fail_closed = stop_body.index("Impossible d arrêter complètement l ancienne installation Auto Director", verify_remaining)
+        self.assertLess(wait_after_kill, verify_remaining)
+        self.assertLess(verify_remaining, fail_closed)
+        self.assertIn("local_agent\\.ps1", stop_body[verify_remaining:fail_closed])
+        self.assertIn("run_worker_logged\\.ps1", stop_body[verify_remaining:fail_closed])
+        self.assertIn("START_LOCAL_WORKER_WINDOWS\\.ps1", stop_body[verify_remaining:fail_closed])
+        self.assertIn("http_worker\\.py", stop_body[verify_remaining:fail_closed])
+        self.assertIn("http_worker_v2\\.py", stop_body[verify_remaining:fail_closed])
+
 
 if __name__ == "__main__":
     unittest.main()
