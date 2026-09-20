@@ -40,6 +40,32 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertIn("$script:LastExitCode=[int]$script:WorkerProcess.ExitCode", agent)
         self.assertNotIn("Get-Process -Id $script:WorkerPid", agent)
 
+    def test_local_agent_keeps_tracking_worker_when_stop_fails(self):
+        agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
+        stop_start = agent.index("function Stop-Worker")
+        heartbeat_start = agent.index("function Send-StartingHeartbeat", stop_start)
+        stop_body = agent[stop_start:heartbeat_start]
+
+        taskkill = stop_body.index("& taskkill.exe /PID $pidToStop /T /F")
+        exit_code = stop_body.index("$taskkillCode=$LASTEXITCODE", taskkill)
+        code_guard = stop_body.index("if($taskkillCode -ne 0){throw", exit_code)
+        wait = stop_body.index("$script:WorkerProcess.WaitForExit(5000)", code_guard)
+        clear = stop_body.index("$script:WorkerProcess=$null;$script:WorkerPid=$null", wait)
+
+        self.assertLess(taskkill, exit_code)
+        self.assertLess(exit_code, code_guard)
+        self.assertLess(code_guard, wait)
+        self.assertLess(wait, clear)
+        self.assertIn("$script:WorkerProcess.Dispose()", stop_body)
+        self.assertIn(
+            "elseif($method -eq 'POST' -and $path -eq '/stop'){try{Stop-Worker;",
+            agent,
+        )
+        self.assertIn(
+            "catch{Write-Response $stream 500 (Json-Response $false @{error=$_.Exception.Message}) $origin}",
+            agent,
+        )
+
     def test_retry_queue_and_heartbeat_age_are_exposed_to_ui(self):
         server = (ROOT / "app/worker_status.py").read_text(encoding="utf-8")
         browser = (ROOT / "app/static/worker-status.js").read_text(encoding="utf-8")
