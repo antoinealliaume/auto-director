@@ -71,6 +71,23 @@ if(-not(Test-Path $Agent)){throw 'Agent local introuvable après installation.'}
 [Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON',$PythonExe,'User');$env:AUTO_DIRECTOR_PYTHON=$PythonExe
 $StartupDir=[Environment]::GetFolderPath('Startup');$StartupCmd=Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd';$cmd="@echo off`r`nset `"AUTO_DIRECTOR_PYTHON=$PythonExe`"`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"`r`n";Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
 Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
-$psi=New-Object System.Diagnostics.ProcessStartInfo;$psi.FileName='powershell.exe';$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"";$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe;$proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le nouvel agent.'};$status=Wait-ForAgent
+$psi=New-Object System.Diagnostics.ProcessStartInfo;$psi.FileName='powershell.exe';$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"";$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
+try{
+  $proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le nouvel agent.'};$status=Wait-ForAgent
+}catch{
+  $failure=$_.Exception.Message
+  try{Stop-PreviousAutoDirector}catch{}
+  if(Test-Path $Backup){
+    try{
+      if(Test-Path $RepoRoot){Remove-Item $RepoRoot -Recurse -Force}
+      Move-Item $Backup $RepoRoot
+      Write-Host 'Mise à jour annulée : version précédente restaurée.' -ForegroundColor Yellow
+    }catch{
+      throw "Le nouvel agent n a pas démarré et la restauration de la version précédente a échoué : $failure"
+    }
+    throw "Mise à jour annulée ; version précédente restaurée : $failure"
+  }
+  throw "Installation interrompue : $failure"
+}
 try{Remove-Item $TempZip -Force -ErrorAction SilentlyContinue}catch{};try{Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 Write-Host '';Write-Host ("Installation V9.2 terminée. Agent PC version "+$status.agentVersion+" actif.") -ForegroundColor Green;Write-Host 'Le Style Engine et le Quality Engine utiliseront automatiquement les composants disponibles sur ton PC.' -ForegroundColor Green;Write-Host 'Retourne dans Auto Director puis clique sur Démarrer le worker PC.' -ForegroundColor Green;Write-Host 'Aucun secret PostgreSQL/Redis n est envoyé au PC.' -ForegroundColor DarkGray;Start-Sleep -Seconds 4
