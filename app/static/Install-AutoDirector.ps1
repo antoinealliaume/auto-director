@@ -42,6 +42,14 @@ function Stop-PreviousAutoDirector {
     foreach($p in $workers){try{& taskkill.exe /PID $p.ProcessId /T /F|Out-Null}catch{}}
   }catch{}
   Start-Sleep -Milliseconds 900
+  $remaining=Get-CimInstance Win32_Process -ErrorAction Stop|Where-Object{
+    $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $rootPattern -and
+    ($_.CommandLine -match 'local_agent\.ps1' -or $_.CommandLine -match 'run_worker_logged\.ps1' -or $_.CommandLine -match 'START_LOCAL_WORKER_WINDOWS\.ps1' -or $_.CommandLine -match 'http_worker\.py' -or $_.CommandLine -match 'http_worker_v2\.py')
+  }
+  if($remaining){
+    $remainingIds=($remaining|ForEach-Object{[string]$_.ProcessId}) -join ', '
+    throw "Impossible d arrêter complètement l ancienne installation Auto Director (PID: $remainingIds)."
+  }
 }
 function Wait-ForAgent {
   $deadline=[DateTime]::UtcNow.AddSeconds(18);$lastVersion=$null
