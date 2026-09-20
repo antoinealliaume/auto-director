@@ -163,7 +163,8 @@ def recover_stale_jobs():
             order by j.updated_at asc limit 50
         """,(JOB_TIMEOUT_SECONDS,)).fetchall()
         for (jid,) in stale:
-            c.execute("update jobs set status='queued',stage='queued',message='Reprise automatique après interruption',progress=0,updated_at=now() where id=%s",(jid,))
+            changed=c.execute("update jobs set status='queued',stage='queued',message='Reprise automatique après interruption',progress=0,updated_at=now() where id=%s and status in ('claimed','running') returning id",(jid,)).fetchone()
+            if not changed:continue
             try:queue.delete('autodirector:lock:'+str(jid))
             except Exception:pass
             recovered.append(jid)
