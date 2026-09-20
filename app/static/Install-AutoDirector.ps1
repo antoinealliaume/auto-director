@@ -26,10 +26,15 @@ function Resolve-RealPython {
 }
 function Stop-PreviousAutoDirector {
   Write-Host 'Arrêt de l ancien agent/worker...' -ForegroundColor Cyan
+  $rootPattern=[regex]::Escape($InstallRoot)
   try{Invoke-RestMethod -Method Post -Uri $AgentStopUrl -ContentType 'application/json' -Body '{}' -TimeoutSec 3|Out-Null}catch{}
-  try{$agents=Get-CimInstance Win32_Process|Where-Object{$_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match 'local_agent\.ps1'};foreach($p in $agents){try{Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop}catch{}}}catch{}
   try{
-    $rootPattern=[regex]::Escape($InstallRoot)
+    $agents=Get-CimInstance Win32_Process|Where-Object{
+      $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $rootPattern -and $_.CommandLine -match 'local_agent\.ps1'
+    }
+    foreach($p in $agents){try{Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop}catch{}}
+  }catch{}
+  try{
     $workers=Get-CimInstance Win32_Process|Where-Object{
       $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $rootPattern -and
       ($_.CommandLine -match 'run_worker_logged\.ps1' -or $_.CommandLine -match 'START_LOCAL_WORKER_WINDOWS\.ps1' -or $_.CommandLine -match 'http_worker\.py')
