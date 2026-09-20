@@ -59,16 +59,21 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         heartbeat_start = agent.index("function Send-StartingHeartbeat", stop_start)
         stop_body = agent[stop_start:heartbeat_start]
 
-        taskkill = stop_body.index("& taskkill.exe /PID $pidToStop /T /F")
+        preference = stop_body.index("$ErrorActionPreference='Continue'")
+        taskkill = stop_body.index("& taskkill.exe /PID $pidToStop /T /F 2>$null|Out-Null", preference)
         exit_code = stop_body.index("$taskkillCode=$LASTEXITCODE", taskkill)
-        code_guard = stop_body.index("if($taskkillCode -ne 0){throw", exit_code)
+        restore = stop_body.index("$ErrorActionPreference=$previousPreference", exit_code)
+        code_guard = stop_body.index("if($taskkillCode -ne 0){if(Worker-IsRunning){throw", restore)
         wait = stop_body.index("$script:WorkerProcess.WaitForExit(5000)", code_guard)
         clear = stop_body.index("$script:WorkerProcess=$null;$script:WorkerPid=$null", wait)
 
+        self.assertLess(preference, taskkill)
         self.assertLess(taskkill, exit_code)
-        self.assertLess(exit_code, code_guard)
+        self.assertLess(exit_code, restore)
+        self.assertLess(restore, code_guard)
         self.assertLess(code_guard, wait)
         self.assertLess(wait, clear)
+        self.assertIn("};return}", stop_body)
         self.assertIn("$script:WorkerProcess.Dispose()", stop_body)
         self.assertIn(
             "elseif($method -eq 'POST' -and $path -eq '/stop'){try{Stop-Worker;",
