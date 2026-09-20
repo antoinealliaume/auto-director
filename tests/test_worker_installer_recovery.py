@@ -24,6 +24,27 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertIn("Agent précédent redémarré après restauration.", installer[restart:rollback_error])
         self.assertIn("Version précédente restaurée, mais son agent n a pas redémarré", installer[restart:rollback_error])
 
+    def test_repository_swap_failure_restores_previous_repository_and_agent(self):
+        installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
+
+        swap_start = installer.index("try{\n  if(Test-Path $RepoRoot){Move-Item $RepoRoot $Backup}")
+        move_new_repo = installer.index("Move-Item $Source $RepoRoot", swap_start)
+        failure_handler = installer.index("}catch{", move_new_repo)
+        backup_guard = installer.index("if(Test-Path $Backup)", failure_handler)
+        remove_partial = installer.index("if(Test-Path $RepoRoot){Remove-Item $RepoRoot -Recurse -Force}", backup_guard)
+        rollback = installer.index("Move-Item $Backup $RepoRoot", remove_partial)
+        restart = installer.index("$restoredProc=[System.Diagnostics.Process]::Start($restoredPsi)", rollback)
+        rollback_error = installer.index("Mise à jour annulée ; version précédente restaurée après échec du remplacement", restart)
+
+        self.assertLess(move_new_repo, failure_handler)
+        self.assertLess(backup_guard, remove_partial)
+        self.assertLess(remove_partial, rollback)
+        self.assertLess(rollback, restart)
+        self.assertLess(restart, rollback_error)
+        self.assertIn("$restoredAgent=Join-Path $RepoRoot 'self_hosted_worker\\local_agent.ps1'", installer[rollback:restart])
+        self.assertIn("Agent précédent redémarré après échec du remplacement.", installer[restart:rollback_error])
+        self.assertIn("Installation interrompue pendant le remplacement du dépôt", installer[failure_handler:])
+
     def test_update_prepares_package_before_stopping_existing_agent(self):
         installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
 
