@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -57,6 +58,14 @@ class JobLifecycleV2Tests(unittest.TestCase):
     def test_cancellation_is_terminal(self):
         self.assertTrue(can_transition("running","cancelled"))
         self.assertFalse(can_transition("cancelled","running"))
+
+    def test_worker_failure_cannot_resurrect_cancelled_job(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"local_worker_api2.py").read_text(encoding="utf-8")
+        fail_block=source.split("    async def fail(",1)[1].split("    app.add_api_route",1)[0]
+        guard="where id=%s and status in ('claimed','running') returning id"
+        self.assertEqual(fail_block.count(guard),2)
+        self.assertIn("if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')",fail_block)
+        self.assertLess(fail_block.index("if not updated"),fail_block.index("if plan['allowed']:rq().zadd"))
 
     def test_structured_logs_correlate_request_and_job(self):
         token=set_request_id('request-123')

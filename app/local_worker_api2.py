@@ -236,9 +236,10 @@ def attach(app):
         wid=require_worker(authorization);jid=uuid.UUID(job_id);_,settings,_=check_lease(jid,wid,False);plan=retry_plan(settings)
         with db() as c:
             if plan['allowed']:
-                c.execute("update jobs set status='queued',stage='retry_wait',progress=0,message=%s,settings=%s,updated_at=now() where id=%s",(f"Nouvelle tentative {plan['attempt']}/2 dans {plan['delaySeconds']} s · {x.error[:300]}",Jsonb(plan['settings']),jid))
-                c.execute("insert into job_events(job_id,stage,message) values(%s,'retry_wait',%s)",(jid,f"Backoff {plan['delaySeconds']} s"))
-            else:c.execute("update jobs set status='failed',stage='error',progress=0,message=%s,updated_at=now() where id=%s",(x.error[:500],jid))
+                updated=c.execute("update jobs set status='queued',stage='retry_wait',progress=0,message=%s,settings=%s,updated_at=now() where id=%s and status in ('claimed','running') returning id",(f"Nouvelle tentative {plan['attempt']}/2 dans {plan['delaySeconds']} s · {x.error[:300]}",Jsonb(plan['settings']),jid)).fetchone()
+                if updated:c.execute("insert into job_events(job_id,stage,message) values(%s,'retry_wait',%s)",(jid,f"Backoff {plan['delaySeconds']} s"))
+            else:updated=c.execute("update jobs set status='failed',stage='error',progress=0,message=%s,updated_at=now() where id=%s and status in ('claimed','running') returning id",(x.error[:500],jid)).fetchone()
+            if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')
             c.execute('delete from worker_leases where job_id=%s',(jid,))
         if plan['allowed']:rq().zadd(RETRY_KEY,{str(jid):time.time()+plan['delaySeconds']})
         try:rq().delete('autodirector:lock:'+str(jid))
