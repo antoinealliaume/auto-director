@@ -9,16 +9,29 @@ $Launcher = Join-Path $RepoRoot 'self_hosted_worker\START_LOCAL_WORKER_WINDOWS.p
 $Runner = Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
 $LogFile = Join-Path $InstallRoot 'worker.log'
 $script:WorkerPid = $null
+$script:WorkerProcess = $null
 $script:LastExitCode = $null
 $script:LastStartError = ''
 
 function Get-LogTail {
   try { if (-not (Test-Path $LogFile)) { return '' }; $text=((Get-Content $LogFile -Encoding UTF8 -Tail 24 -ErrorAction Stop)-join "`n"); if($text.Length -gt 3000){$text=$text.Substring($text.Length-3000)}; return $text } catch { return '' }
 }
-function Worker-IsRunning { if(-not $script:WorkerPid){return $false};try{Get-Process -Id $script:WorkerPid -ErrorAction Stop|Out-Null;return $true}catch{$script:WorkerPid=$null;return $false} }
+function Worker-IsRunning {
+  if(-not $script:WorkerProcess){$script:WorkerPid=$null;return $false}
+  try{
+    if($script:WorkerProcess.HasExited){
+      try{$script:LastExitCode=[int]$script:WorkerProcess.ExitCode}catch{}
+      try{$script:WorkerProcess.Dispose()}catch{}
+      $script:WorkerProcess=$null;$script:WorkerPid=$null;return $false
+    }
+    return $true
+  }catch{
+    $script:WorkerProcess=$null;$script:WorkerPid=$null;return $false
+  }
+}
 function Json-Response([bool]$ok,[hashtable]$extra=@{}) { $running=Worker-IsRunning;$body=@{ok=$ok;agent=$true;agentVersion=$AgentVersion;workerRunning=$running;workerPid=$script:WorkerPid;lastExitCode=$script:LastExitCode;lastStartError=$script:LastStartError;logTail=(Get-LogTail)};foreach($k in $extra.Keys){$body[$k]=$extra[$k]};return ($body|ConvertTo-Json -Compress -Depth 6) }
 function Write-Response($stream,[int]$status,[string]$body,[string]$origin) { $statusText=switch($status){200{'OK'}204{'No Content'}400{'Bad Request'}401{'Unauthorized'}403{'Forbidden'}404{'Not Found'}409{'Conflict'}500{'Internal Server Error'}default{'OK'}};$payload=[Text.Encoding]::UTF8.GetBytes($body);$headers="HTTP/1.1 $status $statusText`r`nContent-Type: application/json; charset=utf-8`r`nContent-Length: $($payload.Length)`r`nCache-Control: no-store`r`nConnection: close`r`n";if($origin -eq $AllowedOrigin){$headers+="Access-Control-Allow-Origin: $AllowedOrigin`r`nVary: Origin`r`nAccess-Control-Allow-Methods: GET, POST, OPTIONS`r`nAccess-Control-Allow-Headers: Content-Type`r`nAccess-Control-Allow-Private-Network: true`r`n"};$headers+="`r`n";$hb=[Text.Encoding]::ASCII.GetBytes($headers);$stream.Write($hb,0,$hb.Length);if($payload.Length -gt 0){$stream.Write($payload,0,$payload.Length)};$stream.Flush() }
-function Stop-Worker { if(Worker-IsRunning){try{& taskkill.exe /PID $script:WorkerPid /T /F|Out-Null}catch{}};$script:WorkerPid=$null }
+function Stop-Worker { if(Worker-IsRunning){try{& taskkill.exe /PID $script:WorkerPid /T /F|Out-Null}catch{}};$script:WorkerProcess=$null;$script:WorkerPid=$null }
 function Send-StartingHeartbeat([string]$studioUrl,[string]$workerToken) { try{$headers=@{Authorization="Bearer $workerToken"};$hb=@{engine='9.2';protocol=2;agentVersion=$AgentVersion;profile='starting';resolution=@(720,1280);fps=24;ffmpegThreads=1;localAI=$false}|ConvertTo-Json -Compress;Invoke-RestMethod -Method Post -Uri ($studioUrl.TrimEnd('/')+'/api/local-worker/heartbeat') -Headers $headers -ContentType 'application/json' -Body $hb -TimeoutSec 12|Out-Null}catch{} }
 function Start-Worker([string]$studioUrl,[string]$studioToken) {
   if(Worker-IsRunning){return @{alreadyRunning=$true;pid=$script:WorkerPid}};$script:LastStartError='';$script:LastExitCode=$null
@@ -27,7 +40,7 @@ function Start-Worker([string]$studioUrl,[string]$studioToken) {
   $headers=@{Authorization="Bearer $studioToken"};$body=@{label=$env:COMPUTERNAME}|ConvertTo-Json -Compress;$session=Invoke-RestMethod -Method Post -Uri ($studioUrl.TrimEnd('/')+'/api/local-worker/session') -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 20;if(-not $session.workerToken){throw 'Le Studio n a pas fourni de jeton worker.'}
   New-Item -ItemType Directory -Force -Path $InstallRoot|Out-Null;Send-StartingHeartbeat $studioUrl ([string]$session.workerToken)
   $psi=New-Object System.Diagnostics.ProcessStartInfo;$psi.FileName='powershell.exe';$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -File `"$Runner`" -Launcher `"$Launcher`" -LogFile `"$LogFile`"";$psi.WorkingDirectory=$RepoRoot;$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.EnvironmentVariables['STUDIO_URL']=$studioUrl.TrimEnd('/');$psi.EnvironmentVariables['WORKER_TOKEN']=[string]$session.workerToken;$psi.EnvironmentVariables['WORKER_KIND']='local';$psi.EnvironmentVariables['REMOTE_WORKER_MODE']='1';$pythonPath=[Environment]::GetEnvironmentVariable('AUTO_DIRECTOR_PYTHON','User');if($pythonPath){$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$pythonPath}
-  $proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le worker.'};$script:WorkerPid=$proc.Id;Start-Sleep -Milliseconds 1700
+  $proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le worker.'};$script:WorkerProcess=$proc;$script:WorkerPid=$proc.Id;Start-Sleep -Milliseconds 1700
   if(-not(Worker-IsRunning)){$tail=Get-LogTail;$script:LastStartError=if($tail){$tail}else{'Le processus worker s est arrêté immédiatement.'};throw $script:LastStartError}
   return @{pid=$proc.Id;started=$true;transport='https';workerId=[string]$session.workerId;logFile=$LogFile}
 }
