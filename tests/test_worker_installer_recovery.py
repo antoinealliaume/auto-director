@@ -24,6 +24,22 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertIn("Agent précédent redémarré après restauration.", installer[restart:rollback_error])
         self.assertIn("Version précédente restaurée, mais son agent n a pas redémarré", installer[restart:rollback_error])
 
+    def test_update_prepares_package_before_stopping_existing_agent(self):
+        installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
+
+        python_ready = installer.index('Write-Host "Python valide: $PythonExe"')
+        download = installer.index("Invoke-WebRequest -Uri $ZipUrl", python_ready)
+        source_validation = installer.index("if(-not(Test-Path $SourceRunner))", download)
+        backup_cleanup = installer.index("if(Test-Path $Backup){Remove-Item $Backup", source_validation)
+        stop = installer.index("Stop-PreviousAutoDirector", backup_cleanup)
+        swap = installer.index("Move-Item $RepoRoot $Backup", stop)
+
+        self.assertLess(download, source_validation)
+        self.assertLess(source_validation, backup_cleanup)
+        self.assertLess(backup_cleanup, stop)
+        self.assertLess(stop, swap)
+        self.assertNotIn("Stop-PreviousAutoDirector", installer[python_ready:download])
+
     def test_update_stops_only_installed_agent_and_orphaned_workers(self):
         installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
         stop_start = installer.index("function Stop-PreviousAutoDirector")
