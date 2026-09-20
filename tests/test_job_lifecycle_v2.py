@@ -67,6 +67,13 @@ class JobLifecycleV2Tests(unittest.TestCase):
         self.assertIn("if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')",fail_block)
         self.assertLess(fail_block.index("if not updated"),fail_block.index("if plan['allowed']:rq().zadd"))
 
+    def test_claim_error_recovery_cannot_resurrect_cancelled_job(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"local_worker_api2.py").read_text(encoding="utf-8")
+        claim_block=source.split("    async def claim(",1)[1].split("    async def asset(",1)[0]
+        self.assertIn("where id=%s and status='claimed'",claim_block)
+        self.assertNotIn("where id=%s\",(jid,));c.execute('delete from worker_leases",claim_block)
+        self.assertIn("delete from worker_leases where job_id=%s",claim_block)
+
     def test_structured_logs_correlate_request_and_job(self):
         token=set_request_id('request-123')
         try:
