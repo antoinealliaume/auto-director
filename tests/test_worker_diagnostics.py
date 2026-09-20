@@ -79,6 +79,21 @@ class WorkerDiagnosticsTests(unittest.TestCase):
             agent,
         )
 
+    def test_worker_launcher_propagates_worker_exit_code(self):
+        launcher = (ROOT / "self_hosted_worker/START_LOCAL_WORKER_WINDOWS.ps1").read_text(encoding="utf-8")
+        runner = (ROOT / "self_hosted_worker/run_worker_logged.ps1").read_text(encoding="utf-8")
+        worker_call = "& $VenvPython (Join-Path $PSScriptRoot 'http_worker_v2.py')"
+        code_capture = "$workerCode=if($null -ne $LASTEXITCODE){[int]$LASTEXITCODE}else{1}"
+
+        self.assertIn(worker_call, launcher)
+        self.assertIn(code_capture, launcher)
+        self.assertLess(launcher.index(worker_call), launcher.index(code_capture))
+        self.assertTrue(launcher.rstrip().endswith("exit $workerCode"))
+        self.assertIn(
+            "$code = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 1 }",
+            runner,
+        )
+
     def test_retry_queue_and_heartbeat_age_are_exposed_to_ui(self):
         server = (ROOT / "app/worker_status.py").read_text(encoding="utf-8")
         browser = (ROOT / "app/static/worker-status.js").read_text(encoding="utf-8")
