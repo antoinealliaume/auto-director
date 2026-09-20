@@ -124,7 +124,7 @@ def attach(app):
         if not compatibility['compatible']:raise HTTPException(409,'Worker incompatible: '+compatibility['reason'])
         with db() as c:
             c.execute('delete from worker_leases where lease_expires<=now()')
-            rows=c.execute("select id,project_id,variants,settings from jobs where status='queued' order by created_at asc for update skip locked limit 10").fetchall()
+            rows=c.execute("select id,project_id,variants,settings from jobs where status='queued' and (coalesce(settings->>'nextAttemptAt','') in ('','null') or (settings->>'nextAttemptAt')::timestamptz <= now()) order by created_at asc for update skip locked limit 10").fetchall()
             for row in rows:
                 lk='autodirector:lock:'+str(row[0])
                 if r.set(lk,'remote:'+wid,nx=True,ex=3600):
