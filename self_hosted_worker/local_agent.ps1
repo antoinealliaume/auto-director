@@ -59,9 +59,9 @@ function Write-Response($stream,[int]$status,[string]$body,[string]$origin) { $s
 function Stop-Worker {
   if(-not(Worker-IsRunning)){return}
   $pidToStop=$script:WorkerPid
-  & taskkill.exe /PID $pidToStop /T /F|Out-Null
-  $taskkillCode=$LASTEXITCODE
-  if($taskkillCode -ne 0){throw "taskkill a échoué (code $taskkillCode)."}
+  $previousPreference=$ErrorActionPreference;$ErrorActionPreference='Continue'
+  try{& taskkill.exe /PID $pidToStop /T /F 2>$null|Out-Null;$taskkillCode=$LASTEXITCODE}finally{$ErrorActionPreference=$previousPreference}
+  if($taskkillCode -ne 0){if(Worker-IsRunning){throw "taskkill a échoué (code $taskkillCode)."};return}
   if(-not $script:WorkerProcess.WaitForExit(5000)){throw 'Le worker ne s est pas arrêté après taskkill.'}
   try{$script:LastExitCode=[int]$script:WorkerProcess.ExitCode}catch{}
   try{$script:WorkerProcess.Dispose()}catch{}
