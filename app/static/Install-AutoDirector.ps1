@@ -37,7 +37,7 @@ function Stop-PreviousAutoDirector {
   try{
     $workers=Get-CimInstance Win32_Process|Where-Object{
       $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $rootPattern -and
-      ($_.CommandLine -match 'run_worker_logged\.ps1' -or $_.CommandLine -match 'START_LOCAL_WORKER_WINDOWS\.ps1' -or $_.CommandLine -match 'http_worker\.py')
+      ($_.CommandLine -match 'run_worker_logged\.ps1' -or $_.CommandLine -match 'START_LOCAL_WORKER_WINDOWS\.ps1' -or $_.CommandLine -match 'http_worker\.py' -or $_.CommandLine -match 'http_worker_v2\.py')
     }
     foreach($p in $workers){try{& taskkill.exe /PID $p.ProcessId /T /F|Out-Null}catch{}}
   }catch{}
