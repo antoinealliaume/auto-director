@@ -17,8 +17,10 @@ class StudioV10Tests(unittest.TestCase):
             self.assertIn(f'id="{control}"', self.html)
         styles = re.findall(r'<link rel="stylesheet" href="([^"]+)"', self.html)
         scripts = re.findall(r'<script src="([^"]+)"', self.html)
-        self.assertEqual(styles[-1], "/static/studio-v10.css?v=10.0.0")
-        self.assertEqual(scripts[-1], "/static/studio-v10.js?v=10.0.0")
+        self.assertEqual(styles[-2], "/static/studio-v10.css?v=11.0.0")
+        self.assertEqual(styles[-1], "/static/studio-master.css?v=11.0.0")
+        self.assertEqual(scripts[-2], "/static/studio-v10.js?v=11.0.0")
+        self.assertEqual(scripts[-1], "/static/studio-master.js?v=11.0.0")
 
     def test_three_themes_density_sidebar_and_accessibility(self):
         for selector in (

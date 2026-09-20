@@ -43,7 +43,7 @@ class V21ReleaseTests(unittest.TestCase):
 
     def test_production_smoke_contract(self):
         healthy = {
-            "ok": True, "version": "10.0.0", "releaseCommit": "abcdef123456",
+            "ok": True, "version": "11.0.0", "releaseCommit": "abcdef123456",
             "publicationMode": "manual-only",
         }
         self.assertEqual(validate_health(healthy, "abcdef1234567890"), [])
@@ -61,8 +61,8 @@ class V21ReleaseTests(unittest.TestCase):
         api = (ROOT / "app/v9_api.py").read_text(encoding="utf-8")
         html = (ROOT / "app/static/index.html").read_text(encoding="utf-8")
         self.assertNotIn("main_module.APP_VERSION='9.2'", api)
-        self.assertIn("main_module.APP_VERSION='10.0.0'", api)
-        self.assertIn("Studio 10", html)
+        self.assertIn("main_module.APP_VERSION='11.0.0'", api)
+        self.assertIn("Studio 11 Master", html)
 
 
 if __name__ == "__main__":
