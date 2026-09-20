@@ -76,8 +76,28 @@ try{
   if(Test-Path $RepoRoot){Move-Item $RepoRoot $Backup}
   Move-Item $Source $RepoRoot
 }catch{
-  try{if((-not(Test-Path $RepoRoot)) -and (Test-Path $Backup)){Move-Item $Backup $RepoRoot}}catch{}
-  throw
+  $swapFailure=$_.Exception.Message
+  if(Test-Path $Backup){
+    try{
+      if(Test-Path $RepoRoot){Remove-Item $RepoRoot -Recurse -Force}
+      Move-Item $Backup $RepoRoot
+      Write-Host 'Remplacement annulé : version précédente restaurée.' -ForegroundColor Yellow
+    }catch{
+      throw "Le remplacement du dépôt a échoué et la restauration de la version précédente a échoué : $swapFailure"
+    }
+    try{
+      $restoredAgent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1'
+      $restoredPsi=New-Object System.Diagnostics.ProcessStartInfo;$restoredPsi.FileName='powershell.exe';$restoredPsi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$restoredAgent`"";$restoredPsi.UseShellExecute=$false;$restoredPsi.CreateNoWindow=$true;$restoredPsi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
+      $restoredProc=[System.Diagnostics.Process]::Start($restoredPsi)
+      if(-not $restoredProc){throw 'Impossible de redémarrer l agent précédent.'}
+      Write-Host 'Agent précédent redémarré après échec du remplacement.' -ForegroundColor Yellow
+    }catch{
+      $restartFailure=$_.Exception.Message
+      throw "Version précédente restaurée, mais son agent n a pas redémarré : $restartFailure. Échec du remplacement : $swapFailure"
+    }
+    throw "Mise à jour annulée ; version précédente restaurée après échec du remplacement : $swapFailure"
+  }
+  throw "Installation interrompue pendant le remplacement du dépôt : $swapFailure"
 }
 $Agent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1';$Runner=Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
 if(-not(Test-Path $Agent)){throw 'Agent local introuvable après installation.'};if(-not(Test-Path $Runner)){throw 'Runner worker introuvable après installation.'}
