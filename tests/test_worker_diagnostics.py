@@ -40,6 +40,19 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertIn("$script:LastExitCode=[int]$script:WorkerProcess.ExitCode", agent)
         self.assertNotIn("Get-Process -Id $script:WorkerPid", agent)
 
+    def test_local_agent_recovers_worker_tracking_after_agent_restart(self):
+        agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
+        self.assertIn("$WorkerStateFile = Join-Path $InstallRoot 'worker-process.json'", agent)
+        self.assertIn("$script:WorkerProcess.StartTime.ToUniversalTime().Ticks", agent)
+        self.assertIn("[System.Diagnostics.Process]::GetProcessById($savedPid)", agent)
+        self.assertIn("$script:WorkerProcess=$proc;$script:WorkerPid=$savedPid", agent)
+        self.assertIn("$script:WorkerProcess=$proc;$script:WorkerPid=$proc.Id;Save-WorkerState;", agent)
+        self.assertIn("Clear-WorkerState", agent)
+        self.assertIn(
+            "\nRecover-WorkerState\n$listener=[System.Net.Sockets.TcpListener]",
+            agent,
+        )
+
     def test_local_agent_keeps_tracking_worker_when_stop_fails(self):
         agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
         stop_start = agent.index("function Stop-Worker")
