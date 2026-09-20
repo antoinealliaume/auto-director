@@ -44,6 +44,13 @@ class StudioMasterTests(unittest.TestCase):
         self.assertIn("Publication toujours manuelle", self.html)
         self.assertNotIn("Publier automatiquement", self.html)
 
+    def test_master_identity_survives_worker_refresh(self):
+        worker = (ROOT / "app/static/worker-status.js").read_text(encoding="utf-8")
+        refresh = (ROOT / "app/static/visual-refresh.css").read_text(encoding="utf-8")
+        self.assertIn("brand-copy span", worker)
+        self.assertIn("Studio 11 Master", worker)
+        self.assertIn('content: "11"', refresh)
+
 
 if __name__ == "__main__":
     unittest.main()
