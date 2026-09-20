@@ -25,7 +25,8 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         wait_start = installer.index("function Wait-ForAgent", stop_start)
         stop_body = installer[stop_start:wait_start]
 
-        self.assertIn("$rootPattern=[regex]::Escape($InstallRoot)", stop_body)
+        self.assertIn("$rootPattern=[regex]::Escape($InstallRoot)+'[\\\\/]'", stop_body)
+        self.assertNotIn("$rootPattern=[regex]::Escape($InstallRoot)\n", stop_body)
         self.assertIn(
             "$_.CommandLine -match $rootPattern -and $_.CommandLine -match 'local_agent\\.ps1'",
             stop_body,
