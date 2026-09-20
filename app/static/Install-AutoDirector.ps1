@@ -61,7 +61,6 @@ if(-not $PythonExe){
   if(-not $PythonExe){throw 'Python a été installé mais reste introuvable. Redémarre Windows puis relance cet installateur.'}
 }
 Write-Host "Python valide: $PythonExe" -ForegroundColor Green
-Stop-PreviousAutoDirector
 Write-Host 'Téléchargement de Auto Director V9.2 Style Engine...' -ForegroundColor Cyan
 try{Remove-Item $TempZip -Force -ErrorAction SilentlyContinue}catch{}
 Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing -Headers @{'Cache-Control'='no-cache'}
@@ -72,6 +71,7 @@ if(-not(Test-Path $SourceAgent)){throw 'Package Auto Director invalide : agent l
 if(-not(Test-Path $SourceRunner)){throw 'Package Auto Director invalide : runner worker absent.'}
 $Backup=Join-Path $InstallRoot 'repo.previous'
 if(Test-Path $Backup){Remove-Item $Backup -Recurse -Force}
+Stop-PreviousAutoDirector
 try{
   if(Test-Path $RepoRoot){Move-Item $RepoRoot $Backup}
   Move-Item $Source $RepoRoot
