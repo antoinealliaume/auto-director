@@ -98,6 +98,14 @@ try{
     }catch{
       throw "Le nouvel agent n a pas démarré et la restauration de la version précédente a échoué : $failure"
     }
+    try{
+      $restoredProc=[System.Diagnostics.Process]::Start($psi)
+      if(-not $restoredProc){throw 'Impossible de redémarrer l agent précédent.'}
+      Write-Host 'Agent précédent redémarré après restauration.' -ForegroundColor Yellow
+    }catch{
+      $restartFailure=$_.Exception.Message
+      throw "Version précédente restaurée, mais son agent n a pas redémarré : $restartFailure. Échec initial : $failure"
+    }
     throw "Mise à jour annulée ; version précédente restaurée : $failure"
   }
   throw "Installation interrompue : $failure"
