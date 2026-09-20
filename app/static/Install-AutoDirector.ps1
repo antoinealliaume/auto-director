@@ -26,7 +26,7 @@ function Resolve-RealPython {
 }
 function Stop-PreviousAutoDirector {
   Write-Host 'Arrêt de l ancien agent/worker...' -ForegroundColor Cyan
-  $rootPattern=[regex]::Escape($InstallRoot)
+  $rootPattern=[regex]::Escape($InstallRoot)+'[\\/]'
   try{Invoke-RestMethod -Method Post -Uri $AgentStopUrl -ContentType 'application/json' -Body '{}' -TimeoutSec 3|Out-Null}catch{}
   try{
     $agents=Get-CimInstance Win32_Process|Where-Object{
