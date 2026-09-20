@@ -87,6 +87,16 @@ class JobLifecycleV2Tests(unittest.TestCase):
         self.assertIn("if not changed:continue",recovery_block)
         self.assertLess(recovery_block.index("if not changed:continue"),recovery_block.index("queue.delete('autodirector:lock:'"))
 
+    def test_manual_retry_is_serialized_before_runtime_cleanup(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"main.py").read_text(encoding="utf-8")
+        retry_block=source.split("def retry_job(",1)[1].split("@app.get(\"/api/jobs/{job_id}/events\")",1)[0]
+        self.assertIn("select status,output_asset_ids from jobs where id=%s for update",retry_block)
+        self.assertIn("where id=%s and status in ('failed','cancelled') returning id",retry_block)
+        self.assertLess(retry_block.index("for update"),retry_block.index("queue.lrem"))
+        self.assertLess(retry_block.index("delete from worker_leases"),retry_block.index("update jobs set status='queued'"))
+        self.assertNotIn("_clear_runtime_job_state(jid)",retry_block)
+        self.assertNotIn("_delete_job_outputs(jid)",retry_block)
+
     def test_structured_logs_correlate_request_and_job(self):
         token=set_request_id('request-123')
         try:
