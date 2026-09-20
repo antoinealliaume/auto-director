@@ -73,6 +73,12 @@ class JobLifecycleV2Tests(unittest.TestCase):
         self.assertEqual(claim_block.count("where id=%s and status='claimed'"),1)
         self.assertIn("delete from worker_leases where job_id=%s",claim_block)
 
+    def test_pc_worker_claim_respects_retry_backoff(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"local_worker_api2.py").read_text(encoding="utf-8")
+        claim_block=source.split("    async def claim(",1)[1].split("    async def asset(",1)[0]
+        self.assertIn("coalesce(settings->>'nextAttemptAt','') in ('','null')",claim_block)
+        self.assertIn("(settings->>'nextAttemptAt')::timestamptz <= now()",claim_block)
+
     def test_cloud_recovery_cannot_resurrect_cancelled_job(self):
         source=(Path(__file__).resolve().parents[1]/"engine"/"config.py").read_text(encoding="utf-8")
         recovery_block=source.split("def recover_stale_jobs():",1)[1]
