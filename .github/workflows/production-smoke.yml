@@ -23,8 +23,11 @@ jobs:
       - name: Wait for Render and verify the deployed release
         env:
           EXPECTED_COMMIT: ${{ github.event.workflow_run.head_sha }}
-        run: >-
-          python tools/production_smoke.py
-          --url https://auto-director-web.onrender.com
-          --expected-commit "$EXPECTED_COMMIT"
-          --wait-seconds 600
+        run: |
+          if [ -z "$EXPECTED_COMMIT" ]; then
+            EXPECTED_COMMIT="$(git rev-parse HEAD)"
+          fi
+          python tools/production_smoke.py \
+            --url https://auto-director-web.onrender.com \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --wait-seconds 600
