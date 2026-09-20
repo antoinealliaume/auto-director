@@ -32,6 +32,14 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertIn("'automaticInstall':False", status)
         self.assertIn("'publicationMode':'manual-only'", status)
 
+    def test_local_agent_tracks_process_handle_and_exit_code(self):
+        agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
+        self.assertIn("$script:WorkerProcess = $null", agent)
+        self.assertIn("$script:WorkerProcess=$proc", agent)
+        self.assertIn("$script:WorkerProcess.HasExited", agent)
+        self.assertIn("$script:LastExitCode=[int]$script:WorkerProcess.ExitCode", agent)
+        self.assertNotIn("Get-Process -Id $script:WorkerPid", agent)
+
     def test_retry_queue_and_heartbeat_age_are_exposed_to_ui(self):
         server = (ROOT / "app/worker_status.py").read_text(encoding="utf-8")
         browser = (ROOT / "app/static/worker-status.js").read_text(encoding="utf-8")
