@@ -19,13 +19,17 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertIn("try{Stop-PreviousAutoDirector}catch{}", installer[failure_handler:rollback])
         self.assertIn("version précédente restaurée", installer[rollback:])
 
-    def test_update_stops_orphaned_worker_process_tree(self):
+    def test_update_stops_only_installed_agent_and_orphaned_workers(self):
         installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
         stop_start = installer.index("function Stop-PreviousAutoDirector")
         wait_start = installer.index("function Wait-ForAgent", stop_start)
         stop_body = installer[stop_start:wait_start]
 
-        self.assertIn("[regex]::Escape($InstallRoot)", stop_body)
+        self.assertIn("$rootPattern=[regex]::Escape($InstallRoot)", stop_body)
+        self.assertIn(
+            "$_.CommandLine -match $rootPattern -and $_.CommandLine -match 'local_agent\\.ps1'",
+            stop_body,
+        )
         self.assertIn("run_worker_logged\\.ps1", stop_body)
         self.assertIn("START_LOCAL_WORKER_WINDOWS\\.ps1", stop_body)
         self.assertIn("http_worker\\.py", stop_body)
