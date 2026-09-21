@@ -1,4 +1,4 @@
-# Auto Director - Worker PC V9.1
+# Auto Director - Worker PC V9.2
 
 Le worker PC garde le Studio web sur Render et deplace le calcul video lourd sur le PC local. Le transport de production est HTTPS : le PC n'a pas besoin des identifiants PostgreSQL ou Redis.
 
@@ -12,7 +12,7 @@ L'installateur :
 3. telecharge la derniere version du depot ;
 4. installe le depot dans `%LOCALAPPDATA%\AutoDirector\repo` ;
 5. configure l'agent local au demarrage de Windows ;
-6. demarre l'agent local 2.6 et verifie son endpoint local `127.0.0.1:8765/status`.
+6. demarre l'agent local 2.8 et verifie son endpoint local `127.0.0.1:8765/status`.
 
 Le Studio peut ensuite demander a l'agent de demarrer ou d'arreter le worker PC.
 
@@ -40,7 +40,7 @@ Aucun mot de passe PostgreSQL/Redis et aucune URL de base de donnees ne sont req
 
 Le bot n'active pas automatiquement le 1080p et limite volontairement la charge locale.
 
-## Quality Engine V9.1
+## Quality Engine V9.2
 
 Selon le profil materiel, le worker peut activer des composants locaux facultatifs :
 - detection de scenes ;
