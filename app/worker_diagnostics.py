@@ -1,8 +1,10 @@
-"""Pure worker status diagnostics shared by the status endpoint and tests."""
+"""Pure worker routing/status diagnostics shared by runtime, status endpoint and tests."""
 from __future__ import annotations
 
 import time
 from typing import Any
+
+from .job_lifecycle import worker_compatibility
 
 
 def heartbeat_age_seconds(worker: dict[str, Any] | None, *, now: int | None = None) -> int | None:
@@ -19,6 +21,30 @@ def with_heartbeat_age(worker: dict[str, Any] | None, *, now: int | None = None)
     if not worker:
         return None
     return {**worker, "heartbeatAgeSeconds": heartbeat_age_seconds(worker, now=now)}
+
+
+def heartbeat_compatibility(worker: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not worker:
+        return None
+    return worker_compatibility(worker.get("engine"), worker.get("protocol"))
+
+
+def heartbeat_compatible(worker: dict[str, Any] | None) -> bool:
+    compatibility = heartbeat_compatibility(worker)
+    return bool(compatibility and compatibility.get("compatible"))
+
+
+def select_active_worker(local: dict[str, Any] | None, cloud: dict[str, Any] | None) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Prefer a compatible local worker, otherwise keep the cloud fallback active."""
+    local_compatibility = heartbeat_compatibility(local)
+    if local and local_compatibility and local_compatibility.get("compatible"):
+        return "local", local, local_compatibility
+    cloud_compatibility = heartbeat_compatibility(cloud)
+    if cloud:
+        return "cloud", cloud, cloud_compatibility
+    if local:
+        return "local", local, local_compatibility
+    return None, None, None
 
 
 def diagnostic_state(*, active: dict[str, Any] | None, compatibility: dict[str, Any] | None,
