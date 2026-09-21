@@ -32,6 +32,12 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertIn("'automaticInstall':False", status)
         self.assertIn("'publicationMode':'manual-only'", status)
 
+    def test_pc_doctor_does_not_replace_live_worker_heartbeat(self):
+        doctor = (ROOT / "self_hosted_worker/doctor.py").read_text(encoding="utf-8")
+        self.assertIn("'/api/local-worker/renew'", doctor)
+        self.assertNotIn("'/api/local-worker/heartbeat'", doctor)
+        self.assertNotIn("'engine':'doctor'", doctor)
+
     def test_retry_queue_and_heartbeat_age_are_exposed_to_ui(self):
         server = (ROOT / "app/worker_status.py").read_text(encoding="utf-8")
         browser = (ROOT / "app/static/worker-status.js").read_text(encoding="utf-8")
