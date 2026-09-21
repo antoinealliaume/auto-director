@@ -34,7 +34,7 @@ def main():
             if not token:raise RuntimeError('WORKER_TOKEN absent')
             import httpx
             with httpx.Client(timeout=12,follow_redirects=True) as c:
-                r=c.post(studio+'/api/local-worker/heartbeat',headers={'Authorization':'Bearer '+token},json={'engine':'doctor','profile':'preflight','resolution':[720,1280],'fps':24,'ffmpegThreads':1,'localAI':False})
+                r=c.post(studio+'/api/local-worker/renew',headers={'Authorization':'Bearer '+token})
                 r.raise_for_status()
             return 'HTTPS worker API = OK'
         results.append(check('Studio HTTPS',studio_check,True))
