@@ -53,6 +53,12 @@ class AdaptiveProfileTests(unittest.TestCase):
         self.assertLess(script.index('set ERR=%ERRORLEVEL%'), script.index('echo Le profil ci-dessus'))
         self.assertLess(script.index('if not "%ERR%"=="0"'), script.index('echo Le profil ci-dessus'))
 
+    def test_worker_launcher_ignores_stale_auto_profile_after_detection_failure(self):
+        script = (ROOT / 'self_hosted_worker' / 'START_LOCAL_WORKER_WINDOWS.ps1').read_text(encoding='utf-8')
+        guarded_import = "if($profileCode -eq 0){Import-EnvFile (Join-Path $PSScriptRoot '.auto_profile.env') $true}else{Write-Host 'Profil matériel auto indisponible: profil sûr.'"
+        self.assertIn(guarded_import, script)
+        self.assertNotIn("if($profileCode -ne 0){Write-Host 'Profil matériel auto indisponible: profil sûr.' -ForegroundColor Yellow};Import-EnvFile", script)
+
 
 if __name__ == '__main__':
     unittest.main()
