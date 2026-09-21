@@ -17,8 +17,7 @@ RETRY_KEY = 'auto_director:jobs:retry'
 DATABASE_URL = os.environ.get('DATABASE_URL','')
 EXPECTED_AGENT_VERSION = '2.8'
 INSTALLER_URL = '/static/INSTALL_AUTO_DIRECTOR_WORKER.bat?v=2.8'
-from .job_lifecycle import worker_compatibility
-from .worker_diagnostics import diagnostic_state,with_heartbeat_age
+from .worker_diagnostics import diagnostic_state,select_active_worker,with_heartbeat_age
 
 
 def _redis():
@@ -41,8 +40,7 @@ def worker_status_payload():
         except Exception:depth=None
         try:retry_depth=int(q.zcard(RETRY_KEY))
         except Exception:retry_depth=None
-        active=local or cloud;kind='local' if local else ('cloud' if cloud else None)
-        compatibility=worker_compatibility((active or {}).get('engine'),(active or {}).get('protocol')) if active else None
+        kind,active,compatibility=select_active_worker(local,cloud)
         current=None
         try:
             with psycopg.connect(DATABASE_URL) as c:
