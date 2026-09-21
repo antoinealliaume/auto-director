@@ -150,6 +150,70 @@ class WorkerTranscriptionConfigTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), '384 4 1024 320 4 2.0')
 
+    def test_invalid_runtime_limits_do_not_break_worker_import(self):
+        env = os.environ.copy()
+        env.pop('DATABASE_URL', None)
+        env.pop('REDIS_URL', None)
+        env.update({
+            'REMOTE_WORKER_MODE': '1',
+            'RENDER_WIDTH': 'broken',
+            'RENDER_HEIGHT': '',
+            'RENDER_FPS': 'nope',
+            'FFMPEG_THREADS': '???',
+            'RENDER_CRF': 'bad',
+            'MAX_REVISIONS': 'invalid',
+            'MOMENT_SAMPLES': 'not-a-number',
+            'JOB_TIMEOUT_SECONDS': 'oops',
+        })
+        code = (
+            'from engine import config; '
+            'print(config.RENDER_WIDTH, config.RENDER_HEIGHT, config.RENDER_FPS, '
+            'config.FFMPEG_THREADS, config.RENDER_CRF, config.MAX_REVISIONS, '
+            'config.MOMENT_SAMPLES, config.JOB_TIMEOUT_SECONDS)'
+        )
+        result = subprocess.run(
+            [sys.executable, '-c', code],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '720 1280 30 2 20 1 7 2700')
+
+    def test_runtime_limits_keep_existing_bounds(self):
+        env = os.environ.copy()
+        env.pop('DATABASE_URL', None)
+        env.pop('REDIS_URL', None)
+        env.update({
+            'REMOTE_WORKER_MODE': '1',
+            'RENDER_WIDTH': '1',
+            'RENDER_HEIGHT': '99999',
+            'RENDER_FPS': '1',
+            'FFMPEG_THREADS': '99',
+            'RENDER_CRF': '1',
+            'MAX_REVISIONS': '99',
+            'MOMENT_SAMPLES': '1',
+            'JOB_TIMEOUT_SECONDS': '999999',
+        })
+        code = (
+            'from engine import config; '
+            'print(config.RENDER_WIDTH, config.RENDER_HEIGHT, config.RENDER_FPS, '
+            'config.FFMPEG_THREADS, config.RENDER_CRF, config.MAX_REVISIONS, '
+            'config.MOMENT_SAMPLES, config.JOB_TIMEOUT_SECONDS)'
+        )
+        result = subprocess.run(
+            [sys.executable, '-c', code],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '480 1920 24 6 18 2 4 14400')
+
 
 if __name__ == '__main__':
     unittest.main()
