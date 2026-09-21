@@ -13,9 +13,18 @@ from pathlib import Path
 
 from engine.config import FFMPEG, run
 
+
+def _bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 ENABLED=os.environ.get('LOCAL_QUALITY_ENGINE','0')=='1'
 AUDIO_ENABLED=os.environ.get('AUDIO_BEAT_ANALYSIS','0')=='1'
-MAX_SECONDS=max(20,min(180,int(os.environ.get('QUALITY_AUDIO_MAX_SECONDS','120'))))
+MAX_SECONDS=_bounded_int('QUALITY_AUDIO_MAX_SECONDS',120,20,180)
 _failed=False
 
 
