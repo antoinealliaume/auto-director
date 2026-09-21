@@ -45,6 +45,14 @@ class AdaptiveProfileTests(unittest.TestCase):
             self.assertEqual((p['RENDER_WIDTH'], p['RENDER_HEIGHT']), ('720','1280'))
             self.assertEqual(p['WORKER_CONCURRENCY'], '1')
 
+    def test_hardware_diagnostic_propagates_profile_detection_failure(self):
+        script = (ROOT / 'self_hosted_worker' / 'CHECK_MY_PC.bat').read_text(encoding='utf-8')
+        self.assertIn('set ERR=%ERRORLEVEL%', script)
+        self.assertIn('if not "%ERR%"=="0"', script)
+        self.assertIn('exit /b %ERR%', script)
+        self.assertLess(script.index('set ERR=%ERRORLEVEL%'), script.index('echo Le profil ci-dessus'))
+        self.assertLess(script.index('if not "%ERR%"=="0"'), script.index('echo Le profil ci-dessus'))
+
 
 if __name__ == '__main__':
     unittest.main()
