@@ -13,6 +13,7 @@ class WorkerReadmeVersionTests(unittest.TestCase):
         agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
         entrypoint = (ROOT / "self_hosted_worker/http_worker_v2.py").read_text(encoding="utf-8")
         launcher = (ROOT / "self_hosted_worker/START_LOCAL_WORKER_WINDOWS.ps1").read_text(encoding="utf-8")
+        detector = (ROOT / "self_hosted_worker/detect_profile.py").read_text(encoding="utf-8")
 
         engine_match = re.search(r"ENGINE_VERSION\s*=\s*['\"]([^'\"]+)", config)
         agent_match = re.search(r"\$AgentVersion\s*=\s*['\"]([^'\"]+)", agent)
@@ -26,6 +27,7 @@ class WorkerReadmeVersionTests(unittest.TestCase):
         self.assertIn(f"demarre l'agent local {agent_version}", readme)
         self.assertIn(f'"""V{engine_version} PC worker extensions:', entrypoint)
         self.assertIn(f"fallback Director V{engine_version}.", launcher)
+        self.assertIn(f"else 'Director V{engine_version}'", detector)
 
 
 if __name__ == "__main__":
