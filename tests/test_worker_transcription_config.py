@@ -59,6 +59,38 @@ class WorkerTranscriptionConfigTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), '3 15 40 40')
 
+    def test_invalid_quality_audio_limit_does_not_break_import(self):
+        env = os.environ.copy()
+        env['PYTHONPATH'] = str(WORKER)
+        env['QUALITY_AUDIO_MAX_SECONDS'] = 'broken'
+        result = subprocess.run(
+            [sys.executable, '-c', 'import quality_enhancer; print(quality_enhancer.MAX_SECONDS)'],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '120')
+
+    def test_quality_audio_limit_stays_bounded(self):
+        for raw, expected in [('1', '20'), ('999', '180')]:
+            with self.subTest(raw=raw):
+                env = os.environ.copy()
+                env['PYTHONPATH'] = str(WORKER)
+                env['QUALITY_AUDIO_MAX_SECONDS'] = raw
+                result = subprocess.run(
+                    [sys.executable, '-c', 'import quality_enhancer; print(quality_enhancer.MAX_SECONDS)'],
+                    cwd=ROOT,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), expected)
+
 
 if __name__ == '__main__':
     unittest.main()
