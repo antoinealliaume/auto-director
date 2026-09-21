@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""V9.1 PC worker extensions: speech + open-source quality analysis.
+"""V9.2 PC worker extensions: speech + open-source quality analysis.
 
 The core HTTPS worker stays stable. This entry point decorates analysis and
 Director refinement with optional faster-whisper + librosa/OpenCV/PySceneDetect
