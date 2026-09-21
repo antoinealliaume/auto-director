@@ -46,7 +46,8 @@ def renew_token():
 
 def renew_loop():
     while not STOP.wait(RENEW_SECONDS):
-        if not renew_token():STOP.wait(60)
+        while not renew_token():
+            if STOP.wait(60):return
 
 def heartbeat_payload():return {'engine':ENGINE_VERSION,'protocol':2,'agentVersion':'2.8','profile':PROFILE_NAME,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,'localAI':bool(local_ai_enabled()),'model':MODEL if local_ai_enabled() else None,'styleEngine':True}
 def heartbeat_loop():
