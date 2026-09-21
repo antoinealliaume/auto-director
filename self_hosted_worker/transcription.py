@@ -8,12 +8,21 @@ continues with the core Director.
 import os
 from pathlib import Path
 
+
+def _bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 ENABLED = os.environ.get('LOCAL_TRANSCRIBE', '0') == '1'
 MODEL_NAME = os.environ.get('LOCAL_WHISPER_MODEL', 'tiny') or 'tiny'
-CPU_THREADS = max(1, min(3, int(os.environ.get('LOCAL_WHISPER_THREADS', '1'))))
-MAX_SECONDS = max(15, min(180, int(os.environ.get('LOCAL_WHISPER_MAX_SECONDS', '90'))))
-MAX_SEGMENTS = max(4, min(40, int(os.environ.get('LOCAL_WHISPER_MAX_SEGMENTS', '22'))))
-MAX_WORDS = max(40, min(500, int(os.environ.get('LOCAL_WHISPER_MAX_WORDS', '240'))))
+CPU_THREADS = _bounded_int('LOCAL_WHISPER_THREADS', 1, 1, 3)
+MAX_SECONDS = _bounded_int('LOCAL_WHISPER_MAX_SECONDS', 90, 15, 180)
+MAX_SEGMENTS = _bounded_int('LOCAL_WHISPER_MAX_SEGMENTS', 22, 4, 40)
+MAX_WORDS = _bounded_int('LOCAL_WHISPER_MAX_WORDS', 240, 40, 500)
 _model = None
 _failed = False
 
