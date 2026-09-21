@@ -79,6 +79,14 @@ class JobLifecycleV2Tests(unittest.TestCase):
         self.assertIn("coalesce(settings->>'nextAttemptAt','') in ('','null')",claim_block)
         self.assertIn("(settings->>'nextAttemptAt')::timestamptz <= now()",claim_block)
 
+    def test_pc_worker_completion_conflict_is_treated_as_cancellation(self):
+        source=(Path(__file__).resolve().parents[1]/"self_hosted_worker"/"http_worker.py").read_text(encoding="utf-8")
+        process_block=source.split("def process_remote_job(job):",1)[1].split("def claim_job():",1)[0]
+        conflict="if r.status_code==409:raise RuntimeError('JOB_CANCELLED')"
+        self.assertIn("/api/local-worker/jobs/{jid}/complete",process_block)
+        self.assertIn(conflict,process_block)
+        self.assertLess(process_block.index(conflict),process_block.index("r.raise_for_status()",process_block.index(conflict)))
+
     def test_cloud_recovery_cannot_resurrect_cancelled_job(self):
         source=(Path(__file__).resolve().parents[1]/"engine"/"config.py").read_text(encoding="utf-8")
         recovery_block=source.split("def recover_stale_jobs():",1)[1]
