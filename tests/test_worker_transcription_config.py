@@ -91,6 +91,65 @@ class WorkerTranscriptionConfigTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), expected)
 
+    def test_invalid_local_ai_limits_do_not_break_import(self):
+        env = os.environ.copy()
+        env.pop('DATABASE_URL', None)
+        env.pop('REDIS_URL', None)
+        env.update({
+            'REMOTE_WORKER_MODE': '1',
+            'LOCAL_VLM_TIMEOUT': 'broken',
+            'LOCAL_VLM_IMAGE_WIDTH': '',
+            'LOCAL_VLM_MAX_IMAGES': 'nope',
+            'LOCAL_VLM_NUM_CTX': '???',
+            'LOCAL_VLM_NUM_PREDICT': 'bad',
+            'LOCAL_VLM_THREADS': 'invalid',
+            'LOCAL_VLM_MIN_FREE_GB': 'NaN-ish',
+        })
+        code = (
+            'from engine import local_ai_adaptive as ai; '
+            'print(ai.TIMEOUT, ai.IMAGE_WIDTH, ai.MAX_IMAGES, ai.NUM_CTX, '
+            'ai.NUM_PREDICT, ai.NUM_THREADS, ai.MIN_FREE_GB)'
+        )
+        result = subprocess.run(
+            [sys.executable, '-c', code],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '150.0 448 3 1280 200 2 3.0')
+
+    def test_local_ai_limits_keep_existing_bounds(self):
+        env = os.environ.copy()
+        env.pop('DATABASE_URL', None)
+        env.pop('REDIS_URL', None)
+        env.update({
+            'REMOTE_WORKER_MODE': '1',
+            'LOCAL_VLM_IMAGE_WIDTH': '1',
+            'LOCAL_VLM_MAX_IMAGES': '99',
+            'LOCAL_VLM_NUM_CTX': '1',
+            'LOCAL_VLM_NUM_PREDICT': '999',
+            'LOCAL_VLM_THREADS': '99',
+            'LOCAL_VLM_MIN_FREE_GB': '0',
+        })
+        code = (
+            'from engine import local_ai_adaptive as ai; '
+            'print(ai.IMAGE_WIDTH, ai.MAX_IMAGES, ai.NUM_CTX, ai.NUM_PREDICT, '
+            'ai.NUM_THREADS, ai.MIN_FREE_GB)'
+        )
+        result = subprocess.run(
+            [sys.executable, '-c', code],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '384 4 1024 320 4 2.0')
+
 
 if __name__ == '__main__':
     unittest.main()
