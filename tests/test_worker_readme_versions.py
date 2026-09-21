@@ -11,6 +11,7 @@ class WorkerReadmeVersionTests(unittest.TestCase):
         readme = (ROOT / "self_hosted_worker/README.md").read_text(encoding="utf-8")
         config = (ROOT / "engine/config.py").read_text(encoding="utf-8")
         agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
+        entrypoint = (ROOT / "self_hosted_worker/http_worker_v2.py").read_text(encoding="utf-8")
 
         engine_match = re.search(r"ENGINE_VERSION\s*=\s*['\"]([^'\"]+)", config)
         agent_match = re.search(r"\$AgentVersion\s*=\s*['\"]([^'\"]+)", agent)
@@ -22,6 +23,7 @@ class WorkerReadmeVersionTests(unittest.TestCase):
         self.assertIn(f"Worker PC V{engine_version}", readme)
         self.assertIn(f"Quality Engine V{engine_version}", readme)
         self.assertIn(f"demarre l'agent local {agent_version}", readme)
+        self.assertIn(f'"""V{engine_version} PC worker extensions:', entrypoint)
 
 
 if __name__ == "__main__":
