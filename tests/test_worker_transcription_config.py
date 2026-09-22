@@ -214,6 +214,56 @@ class WorkerTranscriptionConfigTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), '480 1920 24 6 18 2 4 14400')
 
+    def test_invalid_cloud_runtime_limits_do_not_break_import(self):
+        env = os.environ.copy()
+        env.pop('DATABASE_URL', None)
+        env.pop('REDIS_URL', None)
+        env.update({
+            'REMOTE_WORKER_MODE': '1',
+            'RENDER_FPS': 'broken',
+            'QUEUE_RECOVERY_SECONDS': '',
+            'PORT': 'not-a-number',
+        })
+        code = (
+            'from engine import runtime; '
+            'print(runtime.RENDER_FPS, runtime.RECOVERY_SECONDS, runtime.PORT)'
+        )
+        result = subprocess.run(
+            [sys.executable, '-c', code],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '30 60 10000')
+
+    def test_cloud_runtime_limits_stay_bounded(self):
+        env = os.environ.copy()
+        env.pop('DATABASE_URL', None)
+        env.pop('REDIS_URL', None)
+        env.update({
+            'REMOTE_WORKER_MODE': '1',
+            'RENDER_FPS': '99',
+            'QUEUE_RECOVERY_SECONDS': '999',
+            'PORT': '70000',
+        })
+        code = (
+            'from engine import runtime; '
+            'print(runtime.RENDER_FPS, runtime.RECOVERY_SECONDS, runtime.PORT)'
+        )
+        result = subprocess.run(
+            [sys.executable, '-c', code],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), '30 300 65535')
+
 
 if __name__ == '__main__':
     unittest.main()
