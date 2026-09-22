@@ -64,6 +64,19 @@ class AdaptiveProfileTests(unittest.TestCase):
         self.assertNotIn('where python >nul', script)
         self.assertLess(script.index('AUTO_DIRECTOR_PYTHON'), script.index('where python.exe'))
 
+    def test_local_test_runner_uses_worker_compatible_python(self):
+        script = (ROOT / 'self_hosted_worker' / 'RUN_LOCAL_TESTS.bat').read_text(encoding='utf-8')
+        self.assertIn('AUTO_DIRECTOR_PYTHON', script)
+        self.assertIn('.venv-local\\Scripts\\python.exe', script)
+        self.assertIn('sys.version_info >= (3,10)', script)
+        self.assertIn('\\WindowsApps\\', script)
+        self.assertIn('where python.exe', script)
+        self.assertIn('py.exe %%S -c', script)
+        self.assertIn('"%PYTHON_EXE%" -m unittest tests.test_adaptive_profile -v', script)
+        self.assertIn('py.exe %PYTHON_SELECTOR% -m unittest tests.test_adaptive_profile -v', script)
+        self.assertNotIn('where python >nul', script)
+        self.assertLess(script.index('AUTO_DIRECTOR_PYTHON'), script.index('where python.exe'))
+
     def test_worker_launcher_ignores_stale_auto_profile_after_detection_failure(self):
         script = (ROOT / 'self_hosted_worker' / 'START_LOCAL_WORKER_WINDOWS.ps1').read_text(encoding='utf-8')
         guarded_import = "if($profileCode -eq 0){Import-EnvFile (Join-Path $PSScriptRoot '.auto_profile.env') $true}else{Write-Host 'Profil matériel auto indisponible: profil sûr.'"
