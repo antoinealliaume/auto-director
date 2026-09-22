@@ -29,15 +29,22 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertEqual(diagnostic_state(active=worker, compatibility=compatible, queue_depth=0, retry_depth=0, current_job={"id": "job"})["level"], "busy")
         self.assertEqual(diagnostic_state(active=worker, compatibility=compatible, queue_depth=0, retry_depth=2, current_job=None)["level"], "ready")
 
-    def test_incompatible_local_worker_keeps_cloud_fallback_active(self):
+    def test_incompatible_or_starting_local_worker_keeps_cloud_fallback_active(self):
         incompatible_local = {"engine": "9.1", "protocol": 2, "profile": "old-pc"}
+        starting_local = {"engine": "9.2", "protocol": 2, "profile": "starting"}
         compatible_local = {"engine": "9.2", "protocol": 2, "profile": "current-pc"}
         cloud = {"engine": "9.2", "protocol": 2, "profile": "cloud-safe"}
 
         self.assertFalse(heartbeat_compatible(incompatible_local))
+        self.assertFalse(heartbeat_compatible(starting_local))
         self.assertTrue(heartbeat_compatible(compatible_local))
 
         kind, active, compatibility = select_active_worker(incompatible_local, cloud)
+        self.assertEqual(kind, "cloud")
+        self.assertIs(active, cloud)
+        self.assertTrue(compatibility["compatible"])
+
+        kind, active, compatibility = select_active_worker(starting_local, cloud)
         self.assertEqual(kind, "cloud")
         self.assertIs(active, cloud)
         self.assertTrue(compatibility["compatible"])
@@ -52,7 +59,7 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertIs(active, incompatible_local)
         self.assertFalse(compatibility["compatible"])
 
-    def test_cloud_worker_only_yields_to_compatible_local_heartbeat(self):
+    def test_cloud_worker_only_yields_to_ready_compatible_local_heartbeat(self):
         runtime = (ROOT / "engine/runtime.py").read_text(encoding="utf-8")
         next_job = runtime.split("def next_job():", 1)[1].split("def main():", 1)[0]
         status = (ROOT / "app/worker_status.py").read_text(encoding="utf-8")
