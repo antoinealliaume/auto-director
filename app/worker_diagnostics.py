@@ -31,13 +31,14 @@ def heartbeat_compatibility(worker: dict[str, Any] | None) -> dict[str, Any] | N
 
 def heartbeat_compatible(worker: dict[str, Any] | None) -> bool:
     compatibility = heartbeat_compatibility(worker)
-    return bool(compatibility and compatibility.get("compatible"))
+    starting = str((worker or {}).get("profile") or "").strip().lower() == "starting"
+    return bool(compatibility and compatibility.get("compatible") and not starting)
 
 
 def select_active_worker(local: dict[str, Any] | None, cloud: dict[str, Any] | None) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
-    """Prefer a compatible local worker, otherwise keep the cloud fallback active."""
+    """Prefer a ready, compatible local worker, otherwise keep the cloud fallback active."""
     local_compatibility = heartbeat_compatibility(local)
-    if local and local_compatibility and local_compatibility.get("compatible"):
+    if local and heartbeat_compatible(local):
         return "local", local, local_compatibility
     cloud_compatibility = heartbeat_compatibility(cloud)
     if cloud:
