@@ -21,7 +21,7 @@ class MainRuntimeConfigTests(unittest.TestCase):
             [
                 sys.executable,
                 '-c',
-                'from app import main; print(main.TOKEN_TTL_SECONDS, main.MAX_UPLOAD_MB)',
+                'from app import main, storage_api; print(main.TOKEN_TTL_SECONDS, main.MAX_UPLOAD_MB, storage_api.MAX_UPLOAD_MB)',
             ],
             cwd=ROOT,
             env=env,
@@ -33,11 +33,11 @@ class MainRuntimeConfigTests(unittest.TestCase):
         return result.stdout.strip()
 
     def test_invalid_studio_limits_use_existing_defaults(self):
-        self.assertEqual(self._read_limits('broken', ''), '604800 80')
+        self.assertEqual(self._read_limits('broken', ''), '604800 80 80')
 
     def test_studio_limits_keep_existing_bounds(self):
-        self.assertEqual(self._read_limits('1', '1'), '3600 10')
-        self.assertEqual(self._read_limits(str(31 * 24 * 3600), '9999'), '2592000 500')
+        self.assertEqual(self._read_limits('1', '1'), '3600 10 10')
+        self.assertEqual(self._read_limits(str(31 * 24 * 3600), '9999'), '2592000 500 500')
 
 
 if __name__ == '__main__':
