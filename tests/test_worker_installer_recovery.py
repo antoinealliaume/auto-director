@@ -70,6 +70,11 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
 
         self.assertIn("$rootPattern=[regex]::Escape($InstallRoot)+'[\\\\/]'", stop_body)
         self.assertNotIn("$rootPattern=[regex]::Escape($InstallRoot)\n", stop_body)
+        status_probe = stop_body.index("$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl")
+        root_check = stop_body.index("([string]$status.installRoot) -eq $InstallRoot", status_probe)
+        graceful_stop = stop_body.index("Invoke-RestMethod -Method Post -Uri $AgentStopUrl", root_check)
+        self.assertLess(status_probe, root_check)
+        self.assertLess(root_check, graceful_stop)
         self.assertIn(
             "$_.CommandLine -match $rootPattern -and $_.CommandLine -match 'local_agent\\.ps1'",
             stop_body,
