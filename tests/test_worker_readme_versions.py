@@ -10,6 +10,7 @@ class WorkerReadmeVersionTests(unittest.TestCase):
     def test_worker_readme_tracks_runtime_versions(self):
         readme = (ROOT / "self_hosted_worker/README.md").read_text(encoding="utf-8")
         config = (ROOT / "engine/config.py").read_text(encoding="utf-8")
+        runtime = (ROOT / "engine/runtime.py").read_text(encoding="utf-8")
         agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
         entrypoint = (ROOT / "self_hosted_worker/http_worker_v2.py").read_text(encoding="utf-8")
         launcher = (ROOT / "self_hosted_worker/START_LOCAL_WORKER_WINDOWS.ps1").read_text(encoding="utf-8")
@@ -28,6 +29,13 @@ class WorkerReadmeVersionTests(unittest.TestCase):
         self.assertIn(f'"""V{engine_version} PC worker extensions:', entrypoint)
         self.assertIn(f"fallback Director V{engine_version}.", launcher)
         self.assertIn(f"else 'Director V{engine_version}'", detector)
+
+        self.assertIn("'ai':'local-vlm' if LOCAL_VLM_URL else f'director-v{ENGINE_VERSION}'", runtime)
+        self.assertIn("print(f'SELFTEST V{ENGINE_VERSION} start'", runtime)
+        self.assertIn("f'automatic V{ENGINE_VERSION} validation'", runtime)
+        self.assertIn("f'selftest V{ENGINE_VERSION}'", runtime)
+        self.assertIn("print(f'V{ENGINE_VERSION} worker loop error'", runtime)
+        self.assertNotIn("V8", runtime)
 
 
 if __name__ == "__main__":
