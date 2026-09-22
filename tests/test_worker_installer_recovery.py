@@ -92,6 +92,18 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertIn("http_worker\\.py", stop_body[verify_remaining:fail_closed])
         self.assertIn("http_worker_v2\\.py", stop_body[verify_remaining:fail_closed])
 
+    def test_wait_for_agent_requires_expected_install_root(self):
+        installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
+        wait_start = installer.index("function Wait-ForAgent")
+        main_start = installer.index("Write-Host '=== Auto Director", wait_start)
+        wait_body = installer[wait_start:main_start]
+
+        version_check = wait_body.index("[version]$lastVersion -ge $ExpectedAgentVersion")
+        root_check = wait_body.index("[string]$status.installRoot -eq $InstallRoot")
+        return_status = wait_body.index("return $status")
+        self.assertLess(version_check, return_status)
+        self.assertLess(root_check, return_status)
+
 
 if __name__ == "__main__":
     unittest.main()
