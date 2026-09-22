@@ -13,8 +13,17 @@ from psycopg.types.json import Jsonb
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
 
+
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
-MAX_UPLOAD_MB = max(10, min(500, int(os.environ.get('MAX_UPLOAD_MB', '80'))))
+MAX_UPLOAD_MB = _bounded_env_int('MAX_UPLOAD_MB', 80, 10, 500)
 
 
 def db():
