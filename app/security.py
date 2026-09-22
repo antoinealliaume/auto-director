@@ -8,10 +8,19 @@ from fastapi.responses import JSONResponse
 
 from .v9_api import attach as attach_v9
 
+
+def _env_int(name, default, minimum, maximum):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 REDIS_URL = os.environ.get('REDIS_URL', '')
-LOGIN_LIMIT = max(5, min(30, int(os.environ.get('LOGIN_LIMIT', '10'))))
-LOGIN_WINDOW = max(60, min(3600, int(os.environ.get('LOGIN_WINDOW_SECONDS', '600'))))
-GLOBAL_LOGIN_LIMIT = max(50, min(500, int(os.environ.get('GLOBAL_LOGIN_LIMIT', '120'))))
+LOGIN_LIMIT = _env_int('LOGIN_LIMIT', 10, 5, 30)
+LOGIN_WINDOW = _env_int('LOGIN_WINDOW_SECONDS', 600, 60, 3600)
+GLOBAL_LOGIN_LIMIT = _env_int('GLOBAL_LOGIN_LIMIT', 120, 50, 500)
 LOCAL_HEARTBEAT = 'autodirector:worker:local:heartbeat'
 
 
