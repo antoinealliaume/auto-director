@@ -17,6 +17,20 @@ class WorkerOllamaBootstrapTests(unittest.TestCase):
         self.assertLess(capture, guard)
         self.assertLess(guard, fallback)
 
+    def test_model_presence_uses_exact_api_tag_names(self):
+        text = LAUNCHER.read_text(encoding='utf-8')
+        tags = text.index("$tags=Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags'")
+        listed = text.index('$listed=@($tags.models', tags)
+        exact = text.index('$listed -contains $model', listed)
+        latest = text.index("$listed -contains ($model+':latest')", exact)
+        pull = text.index('ollama pull $model', latest)
+
+        self.assertLess(tags, listed)
+        self.assertLess(listed, exact)
+        self.assertLess(exact, latest)
+        self.assertLess(latest, pull)
+        self.assertNotIn("-match [regex]::Escape($model)", text)
+
 
 if __name__ == '__main__':
     unittest.main()
