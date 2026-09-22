@@ -29,6 +29,15 @@ from .job_lifecycle import normalize_status
 from .manual_export import export_manifest
 from .structured_logging import log_event, reset_request_id, set_request_id
 
+
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 APP_VERSION = "11.0.0"
 ENGINE_VERSION = "9.2"
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -37,8 +46,8 @@ STUDIO_PASSWORD = os.environ.get("STUDIO_PASSWORD", "").strip()
 E2E_PASSWORD = os.environ.get("E2E_PASSWORD", "").strip()
 _TOKEN_SECRET_ENV = os.environ.get("TOKEN_SECRET", "").strip()
 TOKEN_SECRET = _TOKEN_SECRET_ENV or secrets.token_hex(32)
-TOKEN_TTL_SECONDS = max(3600, min(30 * 24 * 3600, int(os.environ.get("TOKEN_TTL_SECONDS", str(7 * 24 * 3600)))))
-MAX_UPLOAD_MB = max(10, min(500, int(os.environ.get("MAX_UPLOAD_MB", "80"))))
+TOKEN_TTL_SECONDS = _bounded_env_int("TOKEN_TTL_SECONDS", 7 * 24 * 3600, 3600, 30 * 24 * 3600)
+MAX_UPLOAD_MB = _bounded_env_int("MAX_UPLOAD_MB", 80, 10, 500)
 BASE_DIR = Path(__file__).resolve().parent
 QUEUE_KEY = "auto_director:jobs"
 RELEASE_COMMIT = os.environ.get("RENDER_GIT_COMMIT", "").strip()
