@@ -47,8 +47,8 @@ def _chat(prompt,images):
         if enabled():print(f'Local AI skipped: free RAM {free:.1f} GB < {MIN_FREE_GB:.1f} GB',flush=True)
         return None
     imgs=list(images or [])[:MAX_IMAGES]
-    payload={'model':MODEL,'stream':False,'format':'json','keep_alive':'90s','options':{'num_ctx':NUM_CTX,'num_predict':NUM_PREDICT,'num_thread':NUM_THREADS,'temperature':0.20},'messages':[{'role':'user','content':prompt,'images':[base64.b64encode(p.read_bytes()).decode() for p in imgs]}]}
     try:
+        payload={'model':MODEL,'stream':False,'format':'json','keep_alive':'90s','options':{'num_ctx':NUM_CTX,'num_predict':NUM_PREDICT,'num_thread':NUM_THREADS,'temperature':0.20},'messages':[{'role':'user','content':prompt,'images':[base64.b64encode(p.read_bytes()).decode() for p in imgs]}]}
         with httpx.Client(timeout=TIMEOUT) as c:r=c.post(URL+'/api/chat',json=payload);r.raise_for_status();data=r.json()
         return _jsonish(((data.get('message') or {}).get('content')) or '')
     except Exception as e:
