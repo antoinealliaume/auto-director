@@ -53,7 +53,7 @@ function Stop-PreviousAutoDirector {
 }
 function Wait-ForAgent {
   $deadline=[DateTime]::UtcNow.AddSeconds(18);$lastVersion=$null
-  while([DateTime]::UtcNow -lt $deadline){try{$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2;if($status.agentVersion){$lastVersion=[string]$status.agentVersion;try{if([version]$lastVersion -ge $ExpectedAgentVersion){return $status}}catch{}}}catch{};Start-Sleep -Milliseconds 650}
+  while([DateTime]::UtcNow -lt $deadline){try{$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2;if($status.agentVersion){$lastVersion=[string]$status.agentVersion;try{if([version]$lastVersion -ge $ExpectedAgentVersion -and ([string]$status.installRoot -eq $InstallRoot)){return $status}}catch{}}}catch{};Start-Sleep -Milliseconds 650}
   if($lastVersion){throw "Ancien agent encore actif (version $lastVersion). Redémarre Windows puis relance cet installateur."};throw 'Le nouvel agent Auto Director ne répond pas sur le port local 8765.'
 }
 
