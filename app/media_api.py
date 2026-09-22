@@ -14,8 +14,17 @@ from fastapi.responses import JSONResponse, Response
 import storage_backend as media_store
 from storage_schema import ensure_storage_schema
 
+
+def _env_int(name, default, minimum, maximum):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 DATABASE_URL=os.environ.get('DATABASE_URL','')
-MEDIA_TTL=max(300,min(3600,int(os.environ.get('MEDIA_TICKET_TTL','1800'))))
+MEDIA_TTL=_env_int('MEDIA_TICKET_TTL',1800,300,3600)
 
 
 def db():return psycopg.connect(DATABASE_URL)
