@@ -106,6 +106,7 @@ def critic_video(path,technical_score,plan,workdir):
         out=workdir/f'vlm_critic_{i}.jpg'
         try:_frame(path,t,out);frames.append(out)
         except Exception:pass
+    if not frames:return technical_score,{'mode':'technical'}
     obj=_chat(f"Evalue ce TikTok gaming. Hook: {plan.get('hook','')}. Score technique: {technical_score}. Reponds uniquement JSON avec score, hook, clarity, payoff, reason.",frames)
     if not isinstance(obj,dict):return technical_score,{'mode':'technical'}
     try:ai=max(0,min(100,float(obj.get('score',technical_score))))
