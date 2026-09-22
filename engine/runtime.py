@@ -10,7 +10,7 @@ from pathlib import Path
 
 from psycopg.types.json import Jsonb
 
-from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,SELF_TEST,ensure_schema,recover_stale_jobs,promote_due_retries,FFMPEG_THREADS
+from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,RENDER_FPS,SELF_TEST,ensure_schema,recover_stale_jobs,promote_due_retries,FFMPEG_THREADS,_bounded_env_int
 from .job import process_job
 
 WORKER_KIND=os.environ.get('WORKER_KIND','cloud').strip().lower()
@@ -21,8 +21,8 @@ CLOUD_HEARTBEAT_KEY=HEARTBEAT_PREFIX+'cloud:heartbeat'
 PROFILE_NAME=os.environ.get('PROFILE_NAME','cloud-safe' if WORKER_KIND!='local' else 'safe-unknown')
 LOCAL_VLM_URL=os.environ.get('LOCAL_VLM_URL','').strip()
 LOCAL_VLM_MODEL=os.environ.get('LOCAL_VLM_MODEL','qwen2.5vl:3b').strip()
-RENDER_FPS=max(24,min(30,int(os.environ.get('RENDER_FPS','30'))))
-RECOVERY_SECONDS=max(30,min(300,int(os.environ.get('QUEUE_RECOVERY_SECONDS','60'))))
+RECOVERY_SECONDS=_bounded_env_int('QUEUE_RECOVERY_SECONDS',60,30,300)
+PORT=_bounded_env_int('PORT',10000,1,65535)
 
 
 def self_test():
@@ -113,7 +113,7 @@ class Health(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
 
 
-def health_server():HTTPServer(('0.0.0.0',int(os.environ.get('PORT','10000'))),Health).serve_forever()
+def health_server():HTTPServer(('0.0.0.0',PORT),Health).serve_forever()
 
 
 def next_job():
