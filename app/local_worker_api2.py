@@ -34,7 +34,7 @@ def _bounded_env_int(name, default, minimum, maximum):
 
 DATABASE_URL = os.environ.get('DATABASE_URL','')
 REDIS_URL = os.environ.get('REDIS_URL','')
-TOKEN_TTL = max(3600,min(7*24*3600,int(os.environ.get('WORKER_TOKEN_TTL','86400'))))
+TOKEN_TTL = _bounded_env_int('WORKER_TOKEN_TTL',86400,3600,7*24*3600)
 QUEUE_KEY='auto_director:jobs'
 RETRY_KEY='auto_director:jobs:retry'
 LOCAL_HEARTBEAT='autodirector:worker:local:heartbeat'
