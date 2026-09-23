@@ -1,7 +1,8 @@
 import { I, mul, trs, slerp, persp, lookAt } from './math.js';
-import {buildFrame as buildV4, motion as motionV4, describe as describeV4, signatures as signaturesV4} from './vfx.js?v=4.0.3';
+import {motion as motionV4, signatures as signaturesV4} from './vfx.js?v=4.0.4';
 
 
+function describeV4(number,tier,clip='Idle') { return {Idle:'Respiration de la créature.',Move:'Déplacement de la créature.',Attack:'Attaque de la créature.',Special:'Animation spéciale.',React:'Réaction à un impact.',Interact:'Interaction expressive.',Spawn:'Apparition de la créature.'}[clip] || 'Animation de la créature.'; }
 const $ = id => document.getElementById(id);
 const canvas = $('scene');
 const stage = $('stage');
@@ -191,22 +192,13 @@ function selectClip(name) {
 }
 function mutationUI(){
   document.querySelectorAll('[data-mutation]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.mutation===mutation)));
-  $('mutation-description').textContent=describeV4(meta.number,mutation,animation?.name);$('subtitle').textContent=`${meta.signature} · ${manifest.mutations[mutation]}`;
+  $('mutation-description').textContent='Apparence '+manifest.mutations[mutation]+' · sans objets ajoutés.';$('subtitle').textContent=`${meta.signature} · ${manifest.mutations[mutation]}`;
   if(compatible)$('fallback').src=`./previews/${meta.id}-${mutation}.jpg`;
   rv.previewTime = 0; rvSyncUI(); if (compatible) rvPreview(0, true);
 }
 function setMutation(v) {mutation=Math.max(0,Math.min(4,Math.trunc(Number(v)||0)));mutationUI();saveAddress();render();}
 function saveAddress(){const url=new URL(location.href);url.hash=`${meta.id}/${mutation}`;history.replaceState(null,'',url);}
-function resetCamera(){
- const r=rvClamp(currentBounds.radius,.8,1.45),aspect=Math.max(.5,stage.clientWidth/stage.clientHeight);
- let top=currentBounds.top,bottom=0,extent=currentBounds.radius;
- for(const t of [0,.6,1.2,1.8,2.4]) {
-  const f=buildV4({number:meta.number,tier:mutation,time:t,clip:'Special',radius:r,quality:.5});
-  for(let i=0;i<f.triangles.length;i+=7){extent=Math.max(extent,Math.abs(f.triangles[i]),Math.abs(f.triangles[i+2]));top=Math.max(top,f.triangles[i+1]);bottom=Math.min(bottom,f.triangles[i+1]);}
- }
- target=[0,(top+bottom)*.5,-.05];distance=Math.max(4.9,extent/(Math.tan(Math.PI/10)*aspect),(top-bottom)*.5/Math.tan(Math.PI/10))*1.24;
- theta=-.36;elevation=.19;automatic=false;$('rotate').setAttribute('aria-pressed','false');
-}
+function resetCamera(){target=[0,currentBounds.top*.47,-.05];distance=Math.max(currentBounds.top*2.25,currentBounds.radius*3.05,4.9);theta=-.36;elevation=.19;automatic=false;$('rotate').setAttribute('aria-pressed','false');}
 
 function fallbackMode(){
   compatible=true;canvas.hidden=true;$('fallback').hidden=false;$('render-state').textContent='APERÇU FIXE · WEBGL INDISPONIBLE';
@@ -267,7 +259,7 @@ window.addEventListener('hashchange',()=>{const [id,v]=location.hash.slice(1).sp
 function tick(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(ready&&!compatible){if(playing){time+=dt*speed;if(time>DUR()){if($('loop').checked)time%=DUR();else{time=DUR();playing=false;}}}if(automatic)theta+=dt*.20;render();timeline();}if(compatible)rvPreview(dt);requestAnimationFrame(tick);}
 // Slime Atlas: five escalating visual signatures, evaluated from the animation clock.
 // Inserted in the original viewer module; the GLBs, skins and material alpha are unchanged.
-const RV_VERSION = 'choreography-v4-20260923';
+const RV_VERSION = 'v4-no-added-objects-20260924';
 const RV_PROFILES = [
  {name:'Normal',color:'#b5ddba'}, {name:'Bleu',color:'#43baff'},
  {name:'Doré',color:'#ffbe36'}, {name:'Radioactif',color:'#a2ff2c'},
@@ -336,7 +328,7 @@ function rvSyncUI() {
 }
 function initRarityControls() {
   const panel = document.createElement('div');
-  panel.className = 'rarity-panel';
+  panel.className = 'rarity-panel'; panel.hidden = true;
   panel.innerHTML = `
     <div class='rarity-top'><span id='rv-level'></span><label class='check'><input id='rv-enabled' type='checkbox'> Effets activés</label></div>
     <div id='rv-bars' class='rarity-bars' aria-hidden='true'></div>
@@ -383,14 +375,7 @@ function v4Colors() {
  const accent=rvHex(rvProfile().color);
  return colors.map((c,i)=>rvMix(c,accent,mutation===4?.32:mutation===3?.3:mutation===2?.25:mutation===1?.2:0));
 }
-function rvBuildFrame(preview = false) {
-  const empty = {points:[],triangles:[],rings:[]};
-  if (!meta || !ready || !rv.enabled || !$('effects').checked || rv.intensity <= 0) return empty;
-  return buildV4({number:meta.number,tier:mutation,time:preview?rv.previewTime:time,
-    duration:DUR(),clip:preview?'Idle':animation?.name,radius:preview?1:rvClamp(currentBounds.radius,.8,1.45),
-    intensity:rv.intensity,quality:rvBudget(),reduced:rv.reduced,
-    colors:v4Colors(),accessories:$('accessories').checked});
-}
+function rvBuildFrame() { return {points:[],triangles:[],rings:[]}; }
 
 function rvInitGL() {
   if (rv.context === gl && rv.pointProgram) return;
@@ -511,6 +496,7 @@ function rvPreview(dt, force = false) {
 }
 
 initRarityControls();
+for(const id of ['effects','accessories']) $(id).closest('label').hidden=true;
 try {
   const r=await fetch('./catalog.json');if(!r.ok)throw Error('Manifest inaccessible');manifest=await r.json();manifest.species.forEach(s=>s.clips.push({id:'Spawn',label:'Apparition V4',duration:2.4,loop:false,events:[]}));
   $('family').innerHTML='<option value="all">Toutes les familles</option>'+manifest.families.map(f=>`<option value="${f.id}">${f.name} · 8</option>`).join('');

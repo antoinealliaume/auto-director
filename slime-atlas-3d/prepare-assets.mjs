@@ -68,5 +68,5 @@ for (const name of [...Object.keys(files).filter(n=>n!=='assets.sha256.json'),'v
   hashes[name] = sha(await readFile(join('public',name)));
 }
 await writeFile('public/assets.sha256.json',JSON.stringify(hashes,null,2));
-await writeFile('public/version.json',JSON.stringify({version:4,engine:'solid-choreography',species:96,build:'2026-09-23-v4.0.3'}));
-console.log('Slime Atlas V4 installed: 96 solid choreographies');
+await writeFile('public/version.json',JSON.stringify({version:4,engine:'no-added-objects',species:96,build:'2026-09-24-v4.0.4'}));
+console.log('Slime Atlas V4 installed: added objects removed');

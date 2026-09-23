@@ -11,7 +11,11 @@ Dossier isolé pour héberger Slime Atlas sur Railway, indépendamment d'AppDepl
 
 Le reste du dépôt auto-director n'est pas modifié.
 
-## Chorégraphies V4
+## Retrait des objets — 24 septembre 2026
+
+Les volumes ajoutés par la V4 ont été retirés du viewer à la demande de l’utilisateur. Le rendu 3D et le mode compatible ne dessinent plus ces objets. Les modèles, leurs apparences et leurs animations restent disponibles. Le moteur de volumes ci-dessous est conservé dans les sources pour historique, mais le viewer ne l’appelle plus.
+
+## Moteur V4 conservé pour historique
 
 `v4/vfx.js` contient 96 compositions explicites de volumes articulés : croissance,
 déploiement, cisaillement, assemblage, chute, effondrement et reconstitution.
