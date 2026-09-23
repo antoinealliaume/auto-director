@@ -1,0 +1,41 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><title>Validation métamorphoses</title>
+<style>body{background:#132329;color:#dcf1d5;font:16px system-ui}iframe{width:1000px;height:700px;border:0}pre{white-space:pre-wrap}</style>
+<h1>Validation des designs intégrés</h1><pre id="report">Initialisation…</pre><iframe src="./index.html#s090/4"></iframe>
+<script type="module">
+const report=document.querySelector('#report'),iframe=document.querySelector('iframe');
+const pause=ms=>new Promise(r=>setTimeout(r,ms));let checks=0,scenes=0;
+const assert=(x,m)=>{if(!x)throw Error(m);checks++;};
+const chosen=[18,19,32,37,90,96],clips=['Idle','Move','Attack','Special','React','Interact','Spawn'];
+const start=performance.now(),errors=[];
+try{
+ while(!iframe.contentWindow.__viewer?.ready){if(performance.now()-start>15000)throw Error('Load timeout');await pause(50);}
+ const w=iframe.contentWindow,doc=w.document,gl=doc.querySelector('#scene').getContext('webgl2');
+ w.addEventListener('error',e=>errors.push(e.message));
+ assert(w.__viewer.mode==='webgl','Shader compilation failed');
+ for(let n=1;n<=96;n++){
+  await w.__creatures.select(`s${String(n).padStart(3,'0')}`);
+  assert(w.__viewer.ready,'Model '+n);
+  assert(Boolean(w.__viewer.design)===chosen.includes(n),'Design scope '+n);
+  const hashes=[];
+  for(const tier of chosen.includes(n)?[0,1,2,3,4]:[4]){
+   w.__creatures.mutation(tier);
+   for(const clip of chosen.includes(n)?clips:['Idle']){
+    w.__creatures.clip(clip);w.__creatures.seek(.8);
+    assert(gl.getError()===gl.NO_ERROR,`${n}/${tier}/${clip} GL error`);
+    assert(w.__rarity.inspect().triangles.length===0,'Added objects returned');scenes++;
+   }
+   if(chosen.includes(n)){
+    w.__creatures.clip('Idle');w.__creatures.seek(.8);
+    const px=new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);
+    gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,px);
+    let hash=2166136261;for(let i=0;i<px.length;i+=53)hash=Math.imul(hash^px[i],16777619);
+    hashes.push(hash);assert(doc.querySelector('#evolution-name').textContent.length>4,'Missing stage name');
+   }
+  }
+  if(chosen.includes(n))assert(new Set(hashes).size===5,'Tiers render identically '+n);
+  if(n%8===0){report.textContent=`${n}/96 modèles · ${scenes} scènes · ${checks} contrôles`;await pause(10);}
+ }
+ assert(errors.length===0,errors.join('\n'));
+ report.textContent=`PASS · 30 apparences revisitées · 96 modèles chargés · ${scenes} scènes · ${checks} contrôles · aucun objet ajouté · ${Math.round((performance.now()-start)/1000)} s`;
+}catch(e){report.textContent=`FAIL : ${e.stack}`;}
+</script></html>

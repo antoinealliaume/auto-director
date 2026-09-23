@@ -1,3 +1,4 @@
+import {designs,linearColor,designVertexUniforms,designFragmentUniforms} from './designs.js?v=4.1.4';
 import { I, mul, trs, slerp, persp, lookAt } from './math.js';
 import {motion as motionV4, signatures as signaturesV4} from './vfx.js?v=4.0.4';
 
@@ -43,20 +44,25 @@ precision highp float;
 layout(location=0) in vec3 aP;layout(location=1) in vec3 aN;layout(location=2) in vec2 aUV;layout(location=3) in vec4 aJ;layout(location=4) in vec4 aW;
 uniform mat4 uVP;uniform mat4 uBones[32];uniform bool uSkinned;
 out vec3 vP;out vec3 vN;out vec2 vUV;
-void main(){mat4 M=mat4(1.);if(uSkinned){ivec4 j=ivec4(aJ);M=uBones[j.x]*aW.x+uBones[j.y]*aW.y+uBones[j.z]*aW.z+uBones[j.w]*aW.w;}vec4 p=M*vec4(aP,1.);vP=p.xyz;vN=transpose(inverse(mat3(M)))*aN;vUV=aUV;gl_Position=uVP*p;}`;
+${designVertexUniforms}
+void main(){mat4 M=mat4(1.);if(uSkinned){ivec4 j=ivec4(aJ);M=uBones[j.x]*aW.x+uBones[j.y]*aW.y+uBones[j.z]*aW.z+uBones[j.w]*aW.w;}vRest=aP;vec4 p=M*vec4(evolve(aP),1.);vP=p.xyz;vN=transpose(inverse(mat3(M)))*aN;vUV=aUV;gl_Position=uVP*p;}`;
 const fs=`#version 300 es
 precision highp float;
 in vec3 vP;in vec3 vN;in vec2 vUV;out vec4 color;
 uniform sampler2D uMap;uniform bool uTextured;uniform vec3 uBase,uEmission,uEye;uniform float uRough,uMetal;uniform bool uFloor;
+${designFragmentUniforms}
 vec3 tone(vec3 x){x=max(x,vec3(0.));return pow(clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.),vec3(1./2.2));}
 void main(){vec3 N=normalize(vN);if(!gl_FrontFacing)N=-N;vec3 V=normalize(uEye-vP);vec3 a=uBase;if(uTextured)a*=pow(texture(uMap,vUV).rgb,vec3(2.2));
 if(uFloor){float d=length(vP.xz);float circle=1.-smoothstep(.009,.017,abs(d-2.25));float contact=1.-.54*exp(-dot(vP.xz/vec2(1.05,.86),vP.xz/vec2(1.05,.86))*1.6);vec3 c=vec3(.020,.039,.047)*contact+circle*vec3(.024,.068,.062);color=vec4(tone(c),1.);return;}
+vec3 artGlow=vec3(0);float rough=uRough,metal=uMetal;
+if(uDesign>0){vec3 art=designSurface(N,V,artGlow,rough,metal);if(art.x>=0.)a=art;}
 vec3 L=normalize(vec3(-.65,.9,.8)), F=normalize(vec3(.7,.4,.8)), R=normalize(vec3(.5,.75,-.7));
 float nl=max(dot(N,L),0.),fill=max(dot(N,F),0.),rim=max(dot(N,R),0.);
 vec3 diffuse=a*(.28+.86*nl+.38*fill+.24*rim);vec3 H=normalize(L+V);
-float shin=mix(90.,8.,uRough);float spec=pow(max(dot(N,H),0.),shin)*(.22+.42*uMetal);
-float fres=pow(1.-max(dot(N,V),0.),3.);vec3 c=diffuse*(1.-.35*uMetal)+mix(vec3(1.,.97,.87),a,uMetal)*spec;
-c+=mix(vec3(.11,.24,.28),a,uMetal)*fres*.3;c+=uEmission*.45;
+float shin=mix(uDesign>0?150.:90.,8.,rough);float spec=pow(max(dot(N,H),0.),shin)*(.22+(uDesign>0?.65:.42)*metal);
+float fres=pow(1.-max(dot(N,V),0.),3.);vec3 c=diffuse*(1.-(uDesign>0?.25:.35)*metal)+mix(vec3(1.,.97,.87),a,metal)*spec;
+c+=mix(vec3(.11,.24,.28),a,metal)*fres*.3;c+=uDesign>0?artGlow:uEmission*.45;
+if(uDesign>0)c+=vec3(.4,.6,.7)*pow(max(dot(N,normalize(vec3(-.4,.8,1.))),0.),70.)*.15;
 color=vec4(tone(c),1.);}`;
 const pvs=`#version 300 es
 precision highp float;layout(location=0) in vec3 aP;layout(location=1) in vec4 aC;layout(location=2) in float aS;
@@ -173,9 +179,16 @@ function render() {
   const eye=[target[0]+Math.sin(theta)*Math.cos(elevation)*distance,target[1]+Math.sin(elevation)*distance,target[2]+Math.cos(theta)*Math.cos(elevation)*distance];
   const vp=mul(persp(36*Math.PI/180,width/height,.05,90),lookAt(eye,target));
   gl.viewport(0,0,width,height);gl.clearColor(0,0,0,0);gl.depthMask(true);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
-  gl.useProgram(program.p);const un=program.u;gl.uniformMatrix4fv(un.uVP,false,vp);gl.uniform3fv(un.uEye,eye);gl.uniform1i(un.uFloor,true);gl.uniform1i(un.uSkinned,false);gl.bindVertexArray(floorMesh);gl.drawArrays(gl.TRIANGLES,0,6);
+  gl.useProgram(program.p);const un=program.u;gl.uniformMatrix4fv(un.uVP,false,vp);gl.uniform3fv(un.uEye,eye);gl.uniform1i(un.uDesign,0);gl.uniform1i(un.uFloor,true);gl.uniform1i(un.uSkinned,false);gl.bindVertexArray(floorMesh);gl.drawArrays(gl.TRIANGLES,0,6);
   gl.uniform1i(un.uFloor,false);gl.uniform1i(un.uSkinned,true);gl.uniformMatrix4fv(un['uBones[0]'],false,skin);
+  const design=designs[meta.number];
+  gl.uniform1i(un.uDesign,design?.kind||0);gl.uniform1f(un.uTier,mutation);
+  gl.uniform1f(un.uClock,rv.reduced?0:time);
+  const bodyPrimitive=asset.meshes[0].primitives.find(p=>p.material===0);
+  gl.uniform1f(un.uBodyTop,bodyPrimitive?asset.accessors[bodyPrimitive.attributes.POSITION].max[1]:currentBounds.top*.75);
+  if(design){const palette=design.palettes[mutation].map(linearColor);gl.uniform3fv(un.uDeep,palette[0]);gl.uniform3fv(un.uLight,palette[1]);gl.uniform3fv(un.uGlow,palette[2]);}
   for(const m of meshes){
+    gl.uniform1f(un.uPart,m.primitive.material%8);
     const mapping=m.primitive.extensions.KHR_materials_variants.mappings.find(v=>v.variants.includes(mutation));const mat=asset.materials[mapping.material],pbr=mat.pbrMetallicRoughness;
     gl.uniform3fv(un.uBase,(pbr.baseColorFactor||[1,1,1,1]).slice(0,3));gl.uniform3fv(un.uEmission,mat.emissiveFactor||[0,0,0]);gl.uniform1f(un.uRough,pbr.roughnessFactor);gl.uniform1f(un.uMetal,pbr.metallicFactor);
     gl.uniform1i(un.uTextured,Boolean(pbr.baseColorTexture));if(pbr.baseColorTexture){gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,textures[asset.textures[pbr.baseColorTexture.index].source]);gl.uniform1i(un.uMap,0);}
@@ -192,13 +205,13 @@ function selectClip(name) {
 }
 function mutationUI(){
   document.querySelectorAll('[data-mutation]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.mutation===mutation)));
-  $('mutation-description').textContent='Apparence '+manifest.mutations[mutation]+' · sans objets ajoutés.';$('subtitle').textContent=`${meta.signature} · ${manifest.mutations[mutation]}`;
+  const design=designs[meta.number];$('mutation-description').textContent=design?design.notes[mutation]:'Apparence '+manifest.mutations[mutation]+'.'; $('evolution-card').hidden=!design;if(design){$('evolution-name').textContent=design.stages[mutation];$('evolution-step').textContent='MÉTAMORPHOSE '+String(mutation+1).padStart(2,'0')+' / 05';}$('subtitle').textContent=`${meta.signature} · ${manifest.mutations[mutation]}`;
   if(compatible)$('fallback').src=`./previews/${meta.id}-${mutation}.jpg`;
   rv.previewTime = 0; rvSyncUI(); if (compatible) rvPreview(0, true);
 }
-function setMutation(v) {mutation=Math.max(0,Math.min(4,Math.trunc(Number(v)||0)));mutationUI();saveAddress();render();}
+function setMutation(v) {mutation=Math.max(0,Math.min(4,Math.trunc(Number(v)||0)));mutationUI();saveAddress();if(designs[meta.number]&&ready)resetCamera();render();}
 function saveAddress(){const url=new URL(location.href);url.hash=`${meta.id}/${mutation}`;history.replaceState(null,'',url);}
-function resetCamera(){target=[0,currentBounds.top*.47,-.05];distance=Math.max(currentBounds.top*2.25,currentBounds.radius*3.05,4.9);theta=-.36;elevation=.19;automatic=false;$('rotate').setAttribute('aria-pressed','false');}
+function resetCamera(){target=[0,currentBounds.top*.47,-.05];distance=Math.max(currentBounds.top*2.25,currentBounds.radius*3.05,4.9)*(designs[meta.number]?1+mutation*.035:1);theta=-.36;elevation=.19;automatic=false;$('rotate').setAttribute('aria-pressed','false');}
 
 function fallbackMode(){
   compatible=true;canvas.hidden=true;$('fallback').hidden=false;$('render-state').textContent='APERÇU FIXE · WEBGL INDISPONIBLE';
@@ -218,8 +231,8 @@ async function loadSpecies(id) {
     raw=data;parse(raw);
     if(!gl||compatible){fallbackMode();return;}
     disposeModel();loadGeometry();const loadedTextures=await Promise.all(asset.images.map(i=>imageTexture(i,token)));if(token!==generation){loadedTextures.forEach(t=>t&&gl.deleteTexture(t));return;}textures=loadedTextures;
-    resetCamera();ready=true;rvSyncUI();$('render-state').textContent='3D TEMPS RÉEL';selectClip('Idle');$('loading').hidden=true;
-    Object.assign(window.__viewer,{ready:true,mode:'webgl',clips:meta.clips.map(c=>c.id)});
+    resetCamera();ready=true;rvSyncUI();$('render-state').textContent=designs[meta.number]?'DESIGN ÉVOLUTIF · 3D':'3D TEMPS RÉEL';selectClip('Idle');$('loading').hidden=true;
+    Object.assign(window.__viewer,{ready:true,mode:'webgl',design:designs[meta.number]?.kind||0,clips:meta.clips.map(c=>c.id)});
   }catch(error){if(token===generation)problem(error);}
 }
 function exportMutation(){
@@ -246,7 +259,7 @@ window.addEventListener('keydown',e=>{if(['INPUT','SELECT','BUTTON'].includes(do
 function normalizeSearch(v){return String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
 function renderCatalogue(){
  if(!manifest)return;const query=normalizeSearch($('search').value),family=$('family').value;
- const filtered=manifest.species.filter(s=>(family==='all'||s.family===family)&&normalizeSearch(`${s.name} ${s.signature} ${s.biome} ${s.id} ${s.number}`).includes(query));
+ const filtered=manifest.species.filter(s=>(family==='all'||s.family===family||(family==='evolutions'&&Boolean(designs[s.number])))&&normalizeSearch(`${s.name} ${s.signature} ${s.biome} ${s.id} ${s.number}`).includes(query));
  $('results-count').textContent=`${filtered.length} / 96`;$('empty').hidden=filtered.length>0;
  $('species').innerHTML=filtered.map(s=>`<button class="species-card" data-species="${s.id}" aria-pressed="${s.id===meta?.id}"><span class="number">${String(s.number).padStart(3,'0')}</span><img src="./previews/${s.id}-0.jpg" alt="" loading="lazy" width="160" height="160"><strong>${s.name}</strong><small>${s.biome}</small></button>`).join('');
  document.querySelectorAll('[data-species]').forEach(b=>b.onclick=()=>{loadSpecies(b.dataset.species);document.body.classList.remove('catalog-open');$('catalog-toggle').setAttribute('aria-expanded','false');});
@@ -259,7 +272,7 @@ window.addEventListener('hashchange',()=>{const [id,v]=location.hash.slice(1).sp
 function tick(now){const dt=Math.min(.05,(now-last)/1000);last=now;if(ready&&!compatible){if(playing){time+=dt*speed;if(time>DUR()){if($('loop').checked)time%=DUR();else{time=DUR();playing=false;}}}if(automatic)theta+=dt*.20;render();timeline();}if(compatible)rvPreview(dt);requestAnimationFrame(tick);}
 // Slime Atlas: five escalating visual signatures, evaluated from the animation clock.
 // Inserted in the original viewer module; the GLBs, skins and material alpha are unchanged.
-const RV_VERSION = 'v4-no-added-objects-20260924';
+const RV_VERSION = 'v4.1-six-evolutions-20260924';
 const RV_PROFILES = [
  {name:'Normal',color:'#b5ddba'}, {name:'Bleu',color:'#43baff'},
  {name:'Doré',color:'#ffbe36'}, {name:'Radioactif',color:'#a2ff2c'},
@@ -322,7 +335,7 @@ function rvSyncUI() {
   if (compatible) {
     $('effects').disabled = false;
     $('accessories').disabled = false;
-    if (ready) $('render-state').textContent = 'MODÈLE FIXE · EFFETS 2D';
+    if (ready) $('render-state').textContent = 'APERÇU ORIGINAL · MODE COMPATIBLE';
   }
   rv.stateKey = `${meta?.id}/${mutation}`;
 }
@@ -495,11 +508,12 @@ function rvPreview(dt, force = false) {
 
 }
 
+const evolution=document.createElement('div');evolution.id='evolution-card';evolution.hidden=true;evolution.innerHTML='<span id="evolution-step"></span><h4 id="evolution-name"></h4><p>Une nouvelle matière, des détails plus riches et une silhouette qui évolue.</p>';$('mutation-description').before(evolution);
 initRarityControls();
 for(const id of ['effects','accessories']) $(id).closest('label').hidden=true;
 try {
   const r=await fetch('./catalog.json');if(!r.ok)throw Error('Manifest inaccessible');manifest=await r.json();manifest.species.forEach(s=>s.clips.push({id:'Spawn',label:'Apparition V4',duration:2.4,loop:false,events:[]}));
-  $('family').innerHTML='<option value="all">Toutes les familles</option>'+manifest.families.map(f=>`<option value="${f.id}">${f.name} · 8</option>`).join('');
+  $('family').innerHTML='<option value="all">Toutes les familles</option><option value="evolutions">Nouveaux designs · 6</option>'+manifest.families.map(f=>`<option value="${f.id}">${f.name} · 8</option>`).join('');
   renderCatalogue();
   $('mutations').innerHTML=manifest.mutations.map((m,i)=>`<button data-mutation="${i}" aria-pressed="false"><span class="swatch" style="background:${mutationColors[i]}"></span>${m}</button>`).join('');
   document.querySelectorAll('[data-mutation]').forEach(b=>b.onclick=()=>setMutation(+b.dataset.mutation));

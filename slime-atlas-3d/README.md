@@ -1,4 +1,4 @@
-# Slime Atlas V4
+# Slime Atlas V4.1
 
 Dossier isolé pour héberger Slime Atlas sur Railway, indépendamment d'AppDeploy.
 
@@ -10,6 +10,25 @@ Dossier isolé pour héberger Slime Atlas sur Railway, indépendamment d'AppDepl
 - `railway.json` : configuration Railway
 
 Le reste du dépôt auto-director n'est pas modifié.
+
+## Six métamorphoses intégrées — V4.1
+
+Obsidien, Géodelle, Phénicendre, Aurorine, Séraphine et Astraroi disposent chacun
+ de cinq directions artistiques dans `v4/designs.js` : palettes dédiées,
+ matières propres à l’espèce, motifs attachés aux surfaces et évolution des ailes,
+ cristaux et diadèmes existants. Le rendu ne génère aucun objet autour du modèle.
+ Les 90 autres espèces conservent leur rendu précédent.
+
+Les motifs utilisent les coordonnées de repos pour suivre la peau animée. La
+ lumière des yeux et la bouche restent séparées des matières décoratives. Les
+ mouvements des matières suivent la timeline et respectent les mouvements réduits.
+ Le filtre « Nouveaux designs · 6 » permet de retrouver les six espèces.
+
+`tests/design-smoke.html`, copié temporairement dans `public/`, vérifie les 30
+ apparences, les 96 modèles, 300 scènes, les erreurs WebGL et l’absence de volumes
+ supplémentaires. L’export GLB et les aperçus sans WebGL restent les originaux,
+ explicitement indiqués dans l’interface ; les matières procédurales et les
+ déformations de silhouette sont propres au rendu de l’atlas.
 
 ## Retrait des objets — 24 septembre 2026
 

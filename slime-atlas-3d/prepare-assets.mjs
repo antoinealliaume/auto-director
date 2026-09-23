@@ -60,13 +60,13 @@ await writeFile('public/slime-atlas.bundle.zip', archive);
 console.log('Slime Atlas V3 installed:', Object.keys(files).length, 'files');
 
 // The archive contains models/textures; the versioned V4 viewer always wins.
-for (const name of ['index.html','viewer.js','vfx.js','math.js']) {
+for (const name of ['index.html','viewer.js','vfx.js','math.js','designs.js']) {
   await copyFile(join('v4',name),join('public',name));
 }
 const hashes = {};
-for (const name of [...Object.keys(files).filter(n=>n!=='assets.sha256.json'),'vfx.js']) {
+for (const name of [...Object.keys(files).filter(n=>n!=='assets.sha256.json'),'vfx.js','designs.js']) {
   hashes[name] = sha(await readFile(join('public',name)));
 }
 await writeFile('public/assets.sha256.json',JSON.stringify(hashes,null,2));
-await writeFile('public/version.json',JSON.stringify({version:4,engine:'no-added-objects',species:96,build:'2026-09-24-v4.0.4'}));
-console.log('Slime Atlas V4 installed: added objects removed');
+await writeFile('public/version.json',JSON.stringify({version:4,engine:'six-intrinsic-evolutions',species:96,build:'2026-09-24-v4.1.4'}));
+console.log('Slime Atlas V4.1 installed: six intrinsic evolutions');
