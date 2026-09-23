@@ -68,6 +68,16 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertNotIn("queue.exists(LOCAL_HEARTBEAT_KEY)", next_job)
         self.assertIn("select_active_worker(local,cloud)", status)
 
+    def test_claim_upgrade_gate_uses_canonical_minimum_engine(self):
+        security = (ROOT / "app/security.py").read_text(encoding="utf-8")
+        lifecycle = (ROOT / "app/job_lifecycle.py").read_text(encoding="utf-8")
+
+        self.assertIn("from .job_lifecycle import MIN_WORKER_ENGINE", security)
+        self.assertIn("if version<MIN_WORKER_ENGINE:", security)
+        self.assertIn("'minimumEngine':'.'.join(map(str,MIN_WORKER_ENGINE))", security)
+        self.assertNotIn("if version<(9,1):", security)
+        self.assertIn("MIN_WORKER_ENGINE = (9, 2)", lifecycle)
+
     def test_agent_versions_are_consistent_in_all_heartbeat_paths(self):
         worker = (ROOT / "self_hosted_worker/http_worker.py").read_text(encoding="utf-8")
         agent = (ROOT / "self_hosted_worker/local_agent.ps1").read_text(encoding="utf-8")
