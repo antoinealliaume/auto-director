@@ -18,7 +18,14 @@ const types = {
 };
 
 createServer((req, res) => {
-  const raw = decodeURIComponent((req.url || '/').split('?')[0]);
+  let raw;
+  try {
+    raw = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('Bad request.');
+    return;
+  }
   const safe = normalize(raw).replace(/^(\.\.[/\\])+/, '');
   let file = join(root, safe);
   if (safe === '/' || safe === '.') file = join(root, 'index.html');
