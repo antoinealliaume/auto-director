@@ -3,10 +3,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { unzipSync } from 'fflate';
 
-const digest = '4f2fb2f35ea5d3088f34a6f7a0ffecddb6b58be4bc4996e4383493f271a4d378';
+const digest = 'c5d98189f41d7b11983069eb3ff780d8457f2256124cd8026f2ff568c2db8797';
 const sources = [
-  'https://slime-atlas-v2-production.up.railway.app/slime-atlas.bundle.zip',
-  'https://sdmntpritalynorth.oaiusercontent.com/files/00000000-8f3c-8246-b3bb-1a4fec50ff6d/raw?se=2026-09-23T21%3A00%3A53Z&sp=r&sv=2026-02-06&sr=b&scid=88b0b7c8-bd0d-57d1-bdbc-4092e3328500&skoid=1d6acb5b-b3f4-43ec-a5ec-b05c4a7708c8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-23T05%3A36%3A25Z&ske=2026-09-24T05%3A36%3A25Z&sks=b&skv=2026-02-06&sig=tZ5luTBQVrJf1ohpyd4p%2BneAkkJ3iTMetQ8zUG188LU%3D'
+  'https://slime-atlas-full-production.up.railway.app/slime-atlas.bundle.zip',
+  'https://sdmntprukwest.oaiusercontent.com/files/00000000-438c-8243-b289-5fef6e41988d/raw?se=2026-09-23T21%3A36%3A49Z&sp=r&sv=2026-02-06&sr=b&scid=637b06c3-3f75-5765-9019-343800671bfb&skoid=1d6acb5b-b3f4-43ec-a5ec-b05c4a7708c8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-23T21%3A01%3A18Z&ske=2026-09-24T21%3A01%3A18Z&sks=b&skv=2026-02-06&sig=WyuqbWVU00jJ2aeUne/ywplxTDYVYad8gWUU3iPLv8U%3D'
 ];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 let archive;
@@ -28,14 +28,14 @@ for (const source of sources) {
     const bytes = Buffer.concat(chunks);
     if (sha(bytes) !== digest) throw new Error('Slime bundle checksum mismatch');
     archive = bytes;
-    console.log('Slime Atlas bundle fetched from', new URL(source).host);
+    console.log('Slime Atlas V3 bundle fetched from', new URL(source).host);
     break;
   } catch (error) {
     console.log('Slime Atlas source unavailable:', error.message);
   }
 }
 
-if (!archive) throw new Error('Unable to fetch Slime Atlas V2 bundle');
+if (!archive) throw new Error('Unable to fetch Slime Atlas V3 bundle');
 
 const allowed = /^(assets\.sha256\.json|catalog\.json|index\.html|math\.js|style\.css|viewer\.js|models\/s\d{3}\.glb|previews\/s\d{3}-[0-4]\.jpg)$/;
 let expanded = 0;
@@ -57,4 +57,4 @@ for (const [name, bytes] of Object.entries(files)) {
 }
 
 await writeFile('public/slime-atlas.bundle.zip', archive);
-console.log('Slime Atlas V2 installed:', Object.keys(files).length, 'files');
+console.log('Slime Atlas V3 installed:', Object.keys(files).length, 'files');
