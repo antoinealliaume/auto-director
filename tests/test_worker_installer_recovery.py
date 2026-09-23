@@ -109,6 +109,15 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertLess(version_check, return_status)
         self.assertLess(root_check, return_status)
 
+    def test_installer_finds_all_supported_system_python_installs(self):
+        installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
+        resolver = installer.split("function Resolve-RealPython", 1)[1].split("function Stop-PreviousAutoDirector", 1)[0]
+
+        self.assertIn("Get-ChildItem $env:ProgramFiles -Directory -Filter 'Python3*'", resolver)
+        self.assertIn("'-3.14'", resolver)
+        self.assertIn("'-3.10'", resolver)
+        self.assertIn("sys.version_info >= (3,10)", installer)
+
 
 if __name__ == "__main__":
     unittest.main()
