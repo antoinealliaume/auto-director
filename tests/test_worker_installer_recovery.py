@@ -81,6 +81,29 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertLess(stop, swap)
         self.assertNotIn("Stop-PreviousAutoDirector", installer[python_ready:download])
 
+    def test_stop_failure_restores_existing_agent_before_swap(self):
+        installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
+
+        helper_start = installer.index("function Restore-PreviousAgentAfterStopFailure")
+        helper_end = installer.index("function Wait-ForAgent", helper_start)
+        helper = installer[helper_start:helper_end]
+        stop_guard = installer.index("try{\n  Stop-PreviousAutoDirector")
+        restore = installer.index("Restore-PreviousAgentAfterStopFailure", stop_guard)
+        abort = installer.index("Mise à jour annulée avant remplacement ; installation précédente conservée", restore)
+        swap = installer.index("try{\n  if(Test-Path $RepoRoot){Move-Item $RepoRoot $Backup}", abort)
+
+        self.assertLess(helper_start, stop_guard)
+        self.assertLess(stop_guard, restore)
+        self.assertLess(restore, abort)
+        self.assertLess(abort, swap)
+        self.assertIn("Invoke-RestMethod -Method Get -Uri $AgentStatusUrl", helper)
+        self.assertIn("([string]$status.installRoot) -eq $InstallRoot", helper)
+        self.assertIn("$previousAgent=Join-Path $RepoRoot 'self_hosted_worker\\local_agent.ps1'", helper)
+        self.assertIn("$previousProc=[System.Diagnostics.Process]::Start($previousPsi)", helper)
+        self.assertIn("if($previousProc.HasExited)", helper)
+        self.assertIn("Agent précédent rétabli après abandon de la mise à jour.", helper)
+        self.assertNotIn("Wait-ForAgent", helper)
+
     def test_update_stops_only_installed_agent_and_orphaned_workers(self):
         installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
         launcher = (ROOT / "self_hosted_worker/START_LOCAL_WORKER_WINDOWS.ps1").read_text(encoding="utf-8")
