@@ -161,7 +161,7 @@ def apply_segment_captions(plan: dict, sources: list[dict]):
     for i,seg in enumerate(plan.get('segments',[])):
         src=by_id.get(str(seg.get('assetId')))
         if not src:continue
-        start=float(seg.get('start',0));end=start+float(seg.get('duration',0) or 0)
+        start=float(seg.get('start',0));duration=float(seg.get('duration',0) or 0);speed=max(.85,min(1.25,float(seg.get('speed',1.0) or 1.0)));end=start+duration*speed
         phrase=caption_for_window(src.get('transcript') or {},start,end,78)
         if not phrase:continue
         if not seg.get('caption') or i==0:
