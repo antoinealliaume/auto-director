@@ -6,16 +6,26 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WorkerInstallerRecoveryTests(unittest.TestCase):
-    def test_failed_agent_start_restores_previous_repository_and_agent(self):
+    def test_post_swap_setup_failure_restores_previous_repository_and_agent(self):
         installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
 
-        start_guard = installer.index("try{\n  $proc=[System.Diagnostics.Process]::Start($psi)")
-        wait_for_agent = installer.index("$status=Wait-ForAgent", start_guard)
+        post_swap = installer.index("$Agent=Join-Path $RepoRoot 'self_hosted_worker\\local_agent.ps1'")
+        psi_setup = installer.index("$psi=New-Object System.Diagnostics.ProcessStartInfo", post_swap)
+        start_guard = installer.index("try{\n  [Environment]::SetEnvironmentVariable", psi_setup)
+        persist_python = installer.index("[Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON'", start_guard)
+        startup_file = installer.index("Set-Content -Path $StartupCmd", persist_python)
+        start_agent = installer.index("$proc=[System.Diagnostics.Process]::Start($psi)", startup_file)
+        wait_for_agent = installer.index("$status=Wait-ForAgent", start_agent)
         failure_handler = installer.index("}catch{", wait_for_agent)
         rollback = installer.index("Move-Item $Backup $RepoRoot", failure_handler)
         restart = installer.index("$restoredProc=[System.Diagnostics.Process]::Start($psi)", rollback)
         rollback_error = installer.index("Mise à jour annulée ; version précédente restaurée", restart)
 
+        self.assertLess(psi_setup, start_guard)
+        self.assertLess(start_guard, persist_python)
+        self.assertLess(persist_python, startup_file)
+        self.assertLess(startup_file, start_agent)
+        self.assertLess(start_agent, wait_for_agent)
         self.assertLess(wait_for_agent, failure_handler)
         self.assertGreater(rollback, failure_handler)
         self.assertGreater(restart, rollback)
