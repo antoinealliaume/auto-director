@@ -118,6 +118,15 @@ class WorkerInstallerRecoveryTests(unittest.TestCase):
         self.assertIn("'-3.10'", resolver)
         self.assertIn("sys.version_info >= (3,10)", installer)
 
+    def test_bootstrap_keeps_temp_path_out_of_powershell_source(self):
+        bootstrap = (ROOT / "app/static/INSTALL_AUTO_DIRECTOR_WORKER.bat").read_text(encoding="utf-8")
+        download_line = next(line for line in bootstrap.splitlines() if "Invoke-WebRequest" in line)
+
+        self.assertIn("-OutFile (Join-Path $env:TEMP 'Install-AutoDirector.ps1')", download_line)
+        self.assertNotIn("-OutFile '%PS1%'", download_line)
+        self.assertIn('set "PS1=%TEMP%\\Install-AutoDirector.ps1"', bootstrap)
+        self.assertIn('-File "%PS1%"', bootstrap)
+
 
 if __name__ == "__main__":
     unittest.main()
