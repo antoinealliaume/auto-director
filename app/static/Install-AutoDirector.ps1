@@ -65,6 +65,13 @@ function Wait-ForAgent {
 
 Write-Host '=== Auto Director V9.2 Style Engine - installation / mise a jour du worker PC ===' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallRoot|Out-Null
+$InstallLockPath=Join-Path $InstallRoot 'install.lock'
+try{
+  # Garde le handle ouvert pendant tout le processus afin de sérialiser les mises à jour.
+  $InstallLock=[System.IO.File]::Open($InstallLockPath,[System.IO.FileMode]::OpenOrCreate,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::None)
+}catch [System.IO.IOException]{
+  throw 'Une installation ou mise à jour Auto Director est déjà en cours.'
+}
 $PythonExe=Resolve-RealPython
 if(-not $PythonExe){
   Write-Host 'Python >= 3.10 absent. Installation automatique de Python 3.12...' -ForegroundColor Yellow;$winget=Get-Command winget.exe -ErrorAction SilentlyContinue
