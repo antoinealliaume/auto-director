@@ -20,6 +20,19 @@ class WorkerInstallerStartupTests(unittest.TestCase):
         self.assertTrue(cmd_expression.isascii())
         self.assertIn("GetEnvironmentVariable('AUTO_DIRECTOR_PYTHON','User')", agent)
 
+    def test_installer_reuses_configured_python_before_fallback_discovery(self):
+        installer = (ROOT / "app/static/Install-AutoDirector.ps1").read_text(encoding="utf-8")
+        resolver = installer.split("function Resolve-RealPython {", 1)[1].split("function Stop-PreviousAutoDirector", 1)[0]
+
+        user_setting = "[Environment]::GetEnvironmentVariable('AUTO_DIRECTOR_PYTHON','User')"
+        self.assertIn(user_setting, resolver)
+        self.assertIn("$env:AUTO_DIRECTOR_PYTHON", resolver)
+        self.assertIn("$candidates.Add($configuredPython)", resolver)
+        self.assertIn("$candidates.Add($env:AUTO_DIRECTOR_PYTHON)", resolver)
+        self.assertLess(resolver.index(user_setting), resolver.index("foreach($p in @("))
+        self.assertLess(resolver.index("$env:AUTO_DIRECTOR_PYTHON"), resolver.index("Get-Command python.exe"))
+        self.assertIn("foreach($p in $candidates){if(Test-RealPython $p){return $p}}", resolver)
+
 
 if __name__ == "__main__":
     unittest.main()
