@@ -60,6 +60,28 @@ function Stop-PreviousAutoDirector {
     throw "Impossible d arrêter complètement l ancienne installation Auto Director (PID: $remainingIds)."
   }
 }
+function Restore-PreviousAgentAfterStopFailure {
+  try{
+    $status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2
+    if(([string]$status.installRoot) -eq $InstallRoot){
+      Write-Host 'Mise à jour annulée : agent existant toujours actif.' -ForegroundColor Yellow
+      return
+    }
+  }catch{}
+  $previousAgent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1'
+  if(-not(Test-Path $previousAgent)){throw 'Agent précédent introuvable après l échec de l arrêt.'}
+  $previousPsi=New-Object System.Diagnostics.ProcessStartInfo;$previousPsi.FileName='powershell.exe';$previousPsi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$previousAgent`"";$previousPsi.UseShellExecute=$false;$previousPsi.CreateNoWindow=$true;$previousPsi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
+  $previousProc=[System.Diagnostics.Process]::Start($previousPsi)
+  if(-not $previousProc){throw 'Impossible de redémarrer l agent précédent après l échec de l arrêt.'}
+  Start-Sleep -Milliseconds 1200
+  if($previousProc.HasExited){throw 'L agent précédent s est arrêté immédiatement après l échec de l arrêt.'}
+  $deadline=[DateTime]::UtcNow.AddSeconds(5)
+  while([DateTime]::UtcNow -lt $deadline){
+    try{$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2;if(([string]$status.installRoot) -eq $InstallRoot){Write-Host 'Agent précédent rétabli après abandon de la mise à jour.' -ForegroundColor Yellow;return}}catch{}
+    Start-Sleep -Milliseconds 500
+  }
+  throw 'L agent précédent a redémarré mais ne répond pas sur le port local 8765.'
+}
 function Wait-ForAgent {
   $deadline=[DateTime]::UtcNow.AddSeconds(18);$lastVersion=$null
   while([DateTime]::UtcNow -lt $deadline){try{$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2;if($status.agentVersion){$lastVersion=[string]$status.agentVersion;try{if([version]$lastVersion -ge $ExpectedAgentVersion -and ([string]$status.installRoot -eq $InstallRoot)){return $status}}catch{}}}catch{};Start-Sleep -Milliseconds 650}
@@ -95,7 +117,16 @@ if(-not(Test-Path $SourceAgent)){throw 'Package Auto Director invalide : agent l
 if(-not(Test-Path $SourceRunner)){throw 'Package Auto Director invalide : runner worker absent.'}
 $Backup=Join-Path $InstallRoot 'repo.previous'
 if(Test-Path $Backup){Remove-Item $Backup -Recurse -Force}
-Stop-PreviousAutoDirector
+try{
+  Stop-PreviousAutoDirector
+}catch{
+  $stopFailure=$_.Exception.Message
+  try{Restore-PreviousAgentAfterStopFailure}catch{
+    $restartFailure=$_.Exception.Message
+    throw "Mise à jour annulée avant remplacement ; l agent précédent n a pas pu être rétabli : $restartFailure. Échec de l arrêt : $stopFailure"
+  }
+  throw "Mise à jour annulée avant remplacement ; installation précédente conservée : $stopFailure"
+}
 try{
   if(Test-Path $RepoRoot){Move-Item $RepoRoot $Backup}
   Move-Item $Source $RepoRoot
