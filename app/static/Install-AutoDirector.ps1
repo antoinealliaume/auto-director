@@ -17,6 +17,9 @@ function Test-RealPython([string]$Path) {
 }
 function Resolve-RealPython {
   $candidates = New-Object System.Collections.Generic.List[string]
+  $configuredPython=[Environment]::GetEnvironmentVariable('AUTO_DIRECTOR_PYTHON','User')
+  if($configuredPython){$candidates.Add($configuredPython)}
+  if($env:AUTO_DIRECTOR_PYTHON -and $env:AUTO_DIRECTOR_PYTHON -ne $configuredPython){$candidates.Add($env:AUTO_DIRECTOR_PYTHON)}
   foreach($p in @((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'),(Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),(Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'),(Join-Path $env:ProgramFiles 'Python313\python.exe'),(Join-Path $env:ProgramFiles 'Python312\python.exe'),(Join-Path $env:ProgramFiles 'Python311\python.exe'))){if($p){$candidates.Add($p)}}
   try{Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Python') -Directory -ErrorAction SilentlyContinue|Sort-Object Name -Descending|ForEach-Object{$p=Join-Path $_.FullName 'python.exe';if(Test-Path $p){$candidates.Add($p)}}}catch{}
   try{Get-ChildItem $env:ProgramFiles -Directory -Filter 'Python3*' -ErrorAction SilentlyContinue|Sort-Object Name -Descending|ForEach-Object{$p=Join-Path $_.FullName 'python.exe';if(Test-Path $p){$candidates.Add($p)}}}catch{}
