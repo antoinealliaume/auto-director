@@ -53,5 +53,24 @@ class WorkerTranscriptionTests(unittest.TestCase):
         self.assertTrue(model.kwargs['word_timestamps'])
         self.assertFalse(Path(model.path).exists())
 
+    def test_speed_adjusted_segments_caption_rendered_source_window(self):
+        fast_sources=[{'id':'asset-fast','transcript':{'segments':[],'words':[
+            {'start':10.1,'end':10.2,'text':'start'},
+            {'start':12.3,'end':12.4,'text':'fast-tail'},
+        ]}}]
+        fast_plan={'segments':[{'assetId':'asset-fast','start':10.0,'duration':2.0,'speed':1.25}]}
+        updated,changed=transcription.apply_segment_captions(fast_plan,fast_sources)
+        self.assertEqual(changed,1)
+        self.assertIn('fast-tail',updated['segments'][0]['caption'])
+
+        slow_sources=[{'id':'asset-slow','transcript':{'segments':[],'words':[
+            {'start':10.1,'end':10.2,'text':'start'},
+            {'start':11.95,'end':12.0,'text':'slow-tail'},
+        ]}}]
+        slow_plan={'segments':[{'assetId':'asset-slow','start':10.0,'duration':2.0,'speed':.85}]}
+        updated,changed=transcription.apply_segment_captions(slow_plan,slow_sources)
+        self.assertEqual(changed,1)
+        self.assertNotIn('slow-tail',updated['segments'][0]['caption'])
+
 
 if __name__=='__main__':unittest.main()
