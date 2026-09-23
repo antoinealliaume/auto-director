@@ -125,11 +125,11 @@ try{
 }
 $Agent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1';$Runner=Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
 if(-not(Test-Path $Agent)){throw 'Agent local introuvable après installation.'};if(-not(Test-Path $Runner)){throw 'Runner worker introuvable après installation.'}
-[Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON',$PythonExe,'User');$env:AUTO_DIRECTOR_PYTHON=$PythonExe
-$StartupDir=[Environment]::GetFolderPath('Startup');$StartupCmd=Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd';$cmd="@echo off`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"%LOCALAPPDATA%\AutoDirector\repo\self_hosted_worker\local_agent.ps1`"`r`n";Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
-Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
 $psi=New-Object System.Diagnostics.ProcessStartInfo;$psi.FileName='powershell.exe';$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"";$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
 try{
+  [Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON',$PythonExe,'User');$env:AUTO_DIRECTOR_PYTHON=$PythonExe
+  $StartupDir=[Environment]::GetFolderPath('Startup');$StartupCmd=Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd';$cmd="@echo off`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"%LOCALAPPDATA%\AutoDirector\repo\self_hosted_worker\local_agent.ps1`"`r`n";Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
+  Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
   $proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le nouvel agent.'};$status=Wait-ForAgent
 }catch{
   $failure=$_.Exception.Message
