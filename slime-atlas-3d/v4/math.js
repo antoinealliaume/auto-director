@@ -1,0 +1,8 @@
+export const I=()=>new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
+export function mul(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];return o;}
+export function trs(t,q,s){const [x,y,z,w]=q,x2=x+x,y2=y+y,z2=z+z,xx=x*x2,xy=x*y2,xz=x*z2,yy=y*y2,yz=y*z2,zz=z*z2,wx=w*x2,wy=w*y2,wz=w*z2;return new Float32Array([(1-yy-zz)*s[0],(xy+wz)*s[0],(xz-wy)*s[0],0,(xy-wz)*s[1],(1-xx-zz)*s[1],(yz+wx)*s[1],0,(xz+wy)*s[2],(yz-wx)*s[2],(1-xx-yy)*s[2],0,...t,1]);}
+export function sub(a,b){return a.map((v,i)=>v-b[i]);}function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}function norm(a){const l=Math.hypot(...a)||1;return a.map(x=>x/l);}
+export function lookAt(e,c){let z=norm(sub(e,c)),x=norm(cross([0,1,0],z)),y=cross(z,x);return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,e),-dot(y,e),-dot(z,e),1]);}
+export function persp(f,a,n,z){const k=1/Math.tan(f/2),r=1/(n-z);return new Float32Array([k/a,0,0,0,0,k,0,0,0,0,(z+n)*r,-1,0,0,2*z*n*r,0]);}
+export function ortho(l,r,b,t,n,f){return new Float32Array([2/(r-l),0,0,0,0,2/(t-b),0,0,0,0,-2/(f-n),0,-(r+l)/(r-l),-(t+b)/(t-b),-(f+n)/(f-n),1]);}
+export function slerp(a,b,f){let d=a.reduce((s,v,i)=>s+v*b[i],0),sign=d<0?-1:1;d=Math.min(Math.abs(d),1);if(d>.9995){const v=a.map((x,i)=>x+(sign*b[i]-x)*f),l=Math.hypot(...v);return v.map(x=>x/l);}let v=Math.acos(d),k=1/Math.sin(v);return a.map((x,i)=>x*Math.sin((1-f)*v)*k+sign*b[i]*Math.sin(f*v)*k);}

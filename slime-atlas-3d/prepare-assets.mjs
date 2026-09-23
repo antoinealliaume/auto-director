@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, copyFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { unzipSync } from 'fflate';
 
 const digest = 'c5d98189f41d7b11983069eb3ff780d8457f2256124cd8026f2ff568c2db8797';
 const sources = [
+  'https://slime-atlas-v3-unique.onrender.com/slime-atlas.bundle.zip',
   'https://slime-atlas-full-production.up.railway.app/slime-atlas.bundle.zip',
-  'https://sdmntprukwest.oaiusercontent.com/files/00000000-438c-8243-b289-5fef6e41988d/raw?se=2026-09-23T21%3A36%3A49Z&sp=r&sv=2026-02-06&sr=b&scid=637b06c3-3f75-5765-9019-343800671bfb&skoid=1d6acb5b-b3f4-43ec-a5ec-b05c4a7708c8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-23T21%3A01%3A18Z&ske=2026-09-24T21%3A01%3A18Z&sks=b&skv=2026-02-06&sig=WyuqbWVU00jJ2aeUne/ywplxTDYVYad8gWUU3iPLv8U%3D'
 ];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 let archive;
@@ -58,3 +58,15 @@ for (const [name, bytes] of Object.entries(files)) {
 
 await writeFile('public/slime-atlas.bundle.zip', archive);
 console.log('Slime Atlas V3 installed:', Object.keys(files).length, 'files');
+
+// The archive contains models/textures; the versioned V4 viewer always wins.
+for (const name of ['index.html','viewer.js','vfx.js','math.js']) {
+  await copyFile(join('v4',name),join('public',name));
+}
+const hashes = {};
+for (const name of [...Object.keys(files).filter(n=>n!=='assets.sha256.json'),'vfx.js']) {
+  hashes[name] = sha(await readFile(join('public',name)));
+}
+await writeFile('public/assets.sha256.json',JSON.stringify(hashes,null,2));
+await writeFile('public/version.json',JSON.stringify({version:4,engine:'solid-choreography',species:96,build:'2026-09-23-v4.0.3'}));
+console.log('Slime Atlas V4 installed: 96 solid choreographies');

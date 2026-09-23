@@ -1,11 +1,12 @@
 {
   "name": "slime-atlas-3d",
   "private": true,
-  "version": "2.0.0",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
     "build": "node prepare-assets.mjs",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/vfx.test.mjs"
   },
   "dependencies": {
     "fflate": "0.8.2"
