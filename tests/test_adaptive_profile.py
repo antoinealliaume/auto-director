@@ -77,6 +77,14 @@ class AdaptiveProfileTests(unittest.TestCase):
         self.assertNotIn('where python >nul', script)
         self.assertLess(script.index('AUTO_DIRECTOR_PYTHON'), script.index('where python.exe'))
 
+    def test_worker_launcher_finds_all_supported_system_python_installs(self):
+        script = (ROOT / 'self_hosted_worker' / 'START_LOCAL_WORKER_WINDOWS.ps1').read_text(encoding='utf-8')
+        resolver = script.split('function Resolve-RealPython', 1)[1].split('$PythonExe=Resolve-RealPython', 1)[0]
+        self.assertIn("Get-ChildItem $env:ProgramFiles -Directory -Filter 'Python3*'", resolver)
+        self.assertIn("'-3.14'", resolver)
+        self.assertIn("'-3.10'", resolver)
+        self.assertIn('sys.version_info >= (3,10)', script)
+
     def test_worker_launcher_ignores_stale_auto_profile_after_detection_failure(self):
         script = (ROOT / 'self_hosted_worker' / 'START_LOCAL_WORKER_WINDOWS.ps1').read_text(encoding='utf-8')
         guarded_import = "if($profileCode -eq 0){Import-EnvFile (Join-Path $PSScriptRoot '.auto_profile.env') $true}else{Write-Host 'Profil matériel auto indisponible: profil sûr.'"
