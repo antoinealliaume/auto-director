@@ -81,7 +81,12 @@ def refine_plan(project_name,plan,sources,paths,workdir):
             "Reponds uniquement JSON avec hook, preferredOrder, captions, reason. Privilegie comprehension immediate, tension, payoff et captions tres courtes.")
     obj=_chat(prompt,frames)
     if not isinstance(obj,dict):return plan,{'mode':'heuristic'}
-    refined={**plan,'source':'local-vlm'};segs=list(plan.get('segments',[]));order=obj.get('preferredOrder')
+    refined={**plan,'source':'local-vlm'};segs=list(plan.get('segments',[]))
+    caps=obj.get('captions') if isinstance(obj.get('captions'),dict) else {}
+    for i,s in enumerate(segs):
+        cap=str(caps.get(str(i),'')).strip()
+        if 1<=len(cap)<=80:s['caption']=cap
+    order=obj.get('preferredOrder')
     if isinstance(order,list):
         valid=[]
         for x in order:
@@ -91,10 +96,6 @@ def refine_plan(project_name,plan,sources,paths,workdir):
         if len(valid)>=2:refined['segments']=[segs[i] for i in valid]+[s for i,s in enumerate(segs) if i not in valid]
     hook=str(obj.get('hook') or '').strip()
     if 5<=len(hook)<=140:refined['hook']=hook
-    caps=obj.get('captions') if isinstance(obj.get('captions'),dict) else {}
-    for i,s in enumerate(refined['segments']):
-        cap=str(caps.get(str(i),'')).strip()
-        if 1<=len(cap)<=80:s['caption']=cap
     return refined,{'mode':'local-vlm','model':MODEL,'reason':str(obj.get('reason',''))[:260],'speechContext':bool(speech)}
 
 
