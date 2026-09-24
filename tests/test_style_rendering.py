@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from engine.config import FFMPEG, run
-from engine.rendering import XFADE, _assemble_xfade, make_segment
+from engine.rendering import DRAWTEXT, XFADE, _assemble_xfade, _concat_segments, make_segment
 from engine.analysis import probe
 
 
@@ -33,6 +33,18 @@ class StyleRenderingSmokeTests(unittest.TestCase):
             self.assertTrue(has_audio)
             self.assertEqual(res,[720,1280])
 
+    def test_drawtext_handles_apostrophe_in_path(self):
+        if not DRAWTEXT:self.skipTest('FFmpeg bundle has no drawtext')
+        with tempfile.TemporaryDirectory(prefix='ad_drawtext_test_') as td:
+            root=Path(td)/"O'Connor";root.mkdir();src=self._source(root);out=root/'styled.mp4'
+            style={'speed':1.0,'motionEffect':'static','colorGrade':'clean','hookVisualStyle':'impact','captionStyle':'minimal'}
+            make_segment(src,out,0,.72,1.03,'Hook test','Caption test',.5,.5,style)
+            duration,has_audio,res=probe(out)
+            self.assertTrue(out.exists() and out.stat().st_size>1000)
+            self.assertGreater(duration,.45)
+            self.assertTrue(has_audio)
+            self.assertEqual(res,[720,1280])
+
     def test_transition_chain_executes_when_supported(self):
         if not XFADE:self.skipTest('FFmpeg bundle has no xfade/acrossfade')
         with tempfile.TemporaryDirectory(prefix='ad_xfade_test_') as td:
@@ -46,6 +58,16 @@ class StyleRenderingSmokeTests(unittest.TestCase):
             self.assertGreater(duration,.8)
             self.assertTrue(has_audio)
             self.assertEqual(res,[720,1280])
+
+    def test_concat_handles_apostrophe_in_path(self):
+        with tempfile.TemporaryDirectory(prefix='ad_concat_test_') as td:
+            root=Path(td)/"O'Connor";root.mkdir();src=self._source(root);out=root/'concat.mp4'
+            _concat_segments(root,[src,src],out)
+            duration,has_audio,res=probe(out)
+            self.assertTrue(out.exists() and out.stat().st_size>1000)
+            self.assertGreater(duration,2.5)
+            self.assertTrue(has_audio)
+            self.assertEqual(res,[360,640])
 
 
 if __name__=='__main__':
