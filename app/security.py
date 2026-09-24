@@ -6,6 +6,7 @@ import os
 import redis
 from fastapi.responses import JSONResponse
 
+from .job_lifecycle import MIN_WORKER_ENGINE
 from .v9_api import attach as attach_v9
 
 REDIS_URL = os.environ.get('REDIS_URL', '')
@@ -55,12 +56,13 @@ def attach(app):
         if path=='/api/worker/bootstrap':
             return JSONResponse({'detail':'Legacy worker bootstrap disabled. Use the HTTPS local-worker protocol.'},status_code=410,headers={'Cache-Control':'no-store'})
 
-        # V9.1 changes timing, crop and analysis semantics. An older PC worker
-        # must never silently consume a new Quality job; cloud V9.1 remains the fallback.
+        # Keep the early upgrade response aligned with the canonical worker contract.
+        # Otherwise a 9.1 worker can be told that 9.1 is sufficient before the claim
+        # endpoint rejects it because the actual minimum is newer.
         if path=='/api/local-worker/jobs/claim' and request.method=='POST':
             version,_info=_worker_engine(request)
-            if version<(9,1):
-                return JSONResponse({'job':None,'upgradeRequired':True,'minimumEngine':'9.1','minimumAgent':'2.6'},status_code=200,headers={'Cache-Control':'no-store'})
+            if version<MIN_WORKER_ENGINE:
+                return JSONResponse({'job':None,'upgradeRequired':True,'minimumEngine':'.'.join(map(str,MIN_WORKER_ENGINE)),'minimumAgent':'2.6'},status_code=200,headers={'Cache-Control':'no-store'})
 
         if path=='/health/deep' and not _studio_authorized(request):
             return JSONResponse({'detail':'Authentification requise'},status_code=401,headers={'Cache-Control':'no-store'})

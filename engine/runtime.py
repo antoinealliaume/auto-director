@@ -10,6 +10,7 @@ from pathlib import Path
 
 from psycopg.types.json import Jsonb
 
+from app.worker_diagnostics import heartbeat_compatible,select_active_worker
 from .config import db,queue,run,FFMPEG,ENGINE_VERSION,RENDER_WIDTH,RENDER_HEIGHT,SELF_TEST,ensure_schema,recover_stale_jobs,promote_due_retries,FFMPEG_THREADS
 from .job import process_job
 
@@ -96,12 +97,12 @@ class Health(BaseHTTPRequestHandler):
         except Exception:pass
         try:ff_ok=run([FFMPEG,'-version'],15,False).returncode==0
         except Exception:pass
-        local_info=read_worker_heartbeat('local');cloud_info=read_worker_heartbeat('cloud')
+        local_info=read_worker_heartbeat('local');cloud_info=read_worker_heartbeat('cloud');active_kind,_,_=select_active_worker(local_info,cloud_info)
         try:queue_depth=int(queue.llen('auto_director:jobs'))
         except Exception:queue_depth=None
         body=json.dumps({
             'ok':db_ok and q_ok and ff_ok,'worker':'ready','workerKind':WORKER_KIND,
-            'activeWorker':'local' if local_info else ('cloud' if cloud_info else WORKER_KIND),
+            'activeWorker':active_kind or WORKER_KIND,
             'localWorkerOnline':bool(local_info),'cloudWorkerOnline':bool(cloud_info),
             'localWorker':local_info,'cloudWorker':cloud_info,'engine':ENGINE_VERSION,
             'database':db_ok,'queue':q_ok,'queueDepth':queue_depth,'ffmpeg':ff_ok,
@@ -119,9 +120,8 @@ def health_server():HTTPServer(('0.0.0.0',int(os.environ.get('PORT','10000'))),H
 def next_job():
     if WORKER_KIND=='local':
         item=queue.brpop('auto_director:jobs',timeout=5);return item[1] if item else None
-    try:
-        if queue.exists(LOCAL_HEARTBEAT_KEY):time.sleep(5);return None
-    except Exception:pass
+    local_info=read_worker_heartbeat('local')
+    if heartbeat_compatible(local_info):time.sleep(5);return None
     item=queue.rpop('auto_director:jobs')
     if not item:time.sleep(4)
     return item
