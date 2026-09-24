@@ -13,26 +13,35 @@ from storage_schema import ensure_storage_schema
 from app.job_lifecycle import DEFAULT_JOB_TIMEOUT_SECONDS, retry_plan
 from app.structured_logging import log_event
 
+
+def _bounded_env_int(name, default, minimum, maximum):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = int(default)
+    return max(minimum, min(maximum, value))
+
+
 ENGINE_VERSION = '9.2'
 ANALYSIS_VERSION = 5
 REMOTE_WORKER_MODE = os.environ.get('REMOTE_WORKER_MODE','0') == '1'
 DATABASE_URL = os.environ.get('DATABASE_URL','')
 REDIS_URL = os.environ.get('REDIS_URL','')
-RENDER_WIDTH = max(480,min(1080,int(os.environ.get('RENDER_WIDTH','720'))))
-RENDER_HEIGHT = max(854,min(1920,int(os.environ.get('RENDER_HEIGHT','1280'))))
-RENDER_FPS = max(24,min(30,int(os.environ.get('RENDER_FPS','30'))))
-FFMPEG_THREADS = max(1,min(6,int(os.environ.get('FFMPEG_THREADS','2'))))
-RENDER_CRF = max(18,min(24,int(os.environ.get('RENDER_CRF','20'))))
+RENDER_WIDTH = _bounded_env_int('RENDER_WIDTH',720,480,1080)
+RENDER_HEIGHT = _bounded_env_int('RENDER_HEIGHT',1280,854,1920)
+RENDER_FPS = _bounded_env_int('RENDER_FPS',30,24,30)
+FFMPEG_THREADS = _bounded_env_int('FFMPEG_THREADS',2,1,6)
+RENDER_CRF = _bounded_env_int('RENDER_CRF',20,18,24)
 RENDER_PRESET = os.environ.get('RENDER_PRESET','veryfast').strip().lower()
 if RENDER_PRESET not in {'ultrafast','superfast','veryfast','faster','fast','medium'}:RENDER_PRESET='veryfast'
-MAX_REVISIONS = max(0,min(2,int(os.environ.get('MAX_REVISIONS','1'))))
-MOMENT_SAMPLES = max(4,min(12,int(os.environ.get('MOMENT_SAMPLES','7'))))
+MAX_REVISIONS = _bounded_env_int('MAX_REVISIONS',1,0,2)
+MOMENT_SAMPLES = _bounded_env_int('MOMENT_SAMPLES',7,4,12)
 SELF_TEST = os.environ.get('SELF_TEST_ON_START','0') == '1'
 FFMPEG = get_ffmpeg_exe()
 queue = redis.from_url(REDIS_URL,decode_responses=True) if REDIS_URL else None
 QUEUE_KEY = 'auto_director:jobs'
 RETRY_KEY = 'auto_director:jobs:retry'
-JOB_TIMEOUT_SECONDS = max(300, min(4 * 3600, int(os.environ.get('JOB_TIMEOUT_SECONDS', str(DEFAULT_JOB_TIMEOUT_SECONDS)))))
+JOB_TIMEOUT_SECONDS = _bounded_env_int('JOB_TIMEOUT_SECONDS',DEFAULT_JOB_TIMEOUT_SECONDS,300,4 * 3600)
 
 
 def db():

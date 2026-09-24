@@ -23,13 +23,22 @@ from engine.memory import load_context
 from .job_lifecycle import WORKER_PROTOCOL, retry_plan, worker_compatibility
 from .structured_logging import log_event
 
+
+def _bounded_env_int(name, default, minimum, maximum):
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = int(default)
+    return max(minimum, min(maximum, value))
+
+
 DATABASE_URL = os.environ.get('DATABASE_URL','')
 REDIS_URL = os.environ.get('REDIS_URL','')
-TOKEN_TTL = max(3600,min(7*24*3600,int(os.environ.get('WORKER_TOKEN_TTL','86400'))))
+TOKEN_TTL = _bounded_env_int('WORKER_TOKEN_TTL',86400,3600,7*24*3600)
 QUEUE_KEY='auto_director:jobs'
 RETRY_KEY='auto_director:jobs:retry'
 LOCAL_HEARTBEAT='autodirector:worker:local:heartbeat'
-MAX_OUTPUT_MB=max(20,min(250,int(os.environ.get('MAX_REMOTE_OUTPUT_MB','120'))))
+MAX_OUTPUT_MB=_bounded_env_int('MAX_REMOTE_OUTPUT_MB',120,20,250)
 
 
 def db(): return psycopg.connect(DATABASE_URL)

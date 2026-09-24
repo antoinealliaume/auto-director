@@ -4,15 +4,30 @@ from pathlib import Path
 import httpx
 from .config import FFMPEG, run
 
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
 URL=os.environ.get('LOCAL_VLM_URL','').rstrip('/')
 MODEL=os.environ.get('LOCAL_VLM_MODEL','qwen2.5vl:3b')
-TIMEOUT=float(os.environ.get('LOCAL_VLM_TIMEOUT','150'))
-IMAGE_WIDTH=max(384,min(640,int(os.environ.get('LOCAL_VLM_IMAGE_WIDTH','448'))))
-MAX_IMAGES=max(2,min(4,int(os.environ.get('LOCAL_VLM_MAX_IMAGES','3'))))
-NUM_CTX=max(1024,min(2048,int(os.environ.get('LOCAL_VLM_NUM_CTX','1280'))))
-NUM_PREDICT=max(120,min(320,int(os.environ.get('LOCAL_VLM_NUM_PREDICT','200'))))
-NUM_THREADS=max(1,min(4,int(os.environ.get('LOCAL_VLM_THREADS','2'))))
-MIN_FREE_GB=max(2.0,float(os.environ.get('LOCAL_VLM_MIN_FREE_GB','3.0')))
+TIMEOUT=_env_float('LOCAL_VLM_TIMEOUT',150.0)
+IMAGE_WIDTH=max(384,min(640,_env_int('LOCAL_VLM_IMAGE_WIDTH',448)))
+MAX_IMAGES=max(2,min(4,_env_int('LOCAL_VLM_MAX_IMAGES',3)))
+NUM_CTX=max(1024,min(2048,_env_int('LOCAL_VLM_NUM_CTX',1280)))
+NUM_PREDICT=max(120,min(320,_env_int('LOCAL_VLM_NUM_PREDICT',200)))
+NUM_THREADS=max(1,min(4,_env_int('LOCAL_VLM_THREADS',2)))
+MIN_FREE_GB=max(2.0,_env_float('LOCAL_VLM_MIN_FREE_GB',3.0))
 
 
 def available_memory_gb():
