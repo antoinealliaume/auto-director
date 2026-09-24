@@ -47,6 +47,15 @@ class V9DirectorTests(unittest.TestCase):
         for seg in plan['segments']:
             self.assertLessEqual(seg['start']+seg['duration'],durations[seg['assetId']]+0.001)
 
+    def test_styled_speed_never_consumes_past_source_end(self):
+        edge=[{'id':'edge','role':'source','duration':3,'moments':[{'start':2,'score':96,'motion':.8,'audio':.6}]}]
+        plan,_=choose_plan('edge',edge,{'pace':2},{'tempo':'balanced'},{},8,0,0,'fast','balanced','auto',visual_style='viral')
+        self.assertTrue(plan['segments'])
+        self.assertTrue(any(float(seg.get('speed',1))>1 for seg in plan['segments']))
+        for seg in plan['segments']:
+            consumed=seg['start']+seg['duration']*float(seg.get('speed',1))
+            self.assertLessEqual(consumed,3.001)
+
 
 class V9RouteTests(unittest.TestCase):
     def test_single_post_jobs_route(self):

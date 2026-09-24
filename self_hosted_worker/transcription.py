@@ -6,7 +6,11 @@ is best-effort and bounded: if transcription is unavailable the video pipeline
 continues with the core Director.
 """
 import os
+import subprocess
+import tempfile
 from pathlib import Path
+
+from imageio_ffmpeg import get_ffmpeg_exe
 
 ENABLED = os.environ.get('LOCAL_TRANSCRIBE', '0') == '1'
 MODEL_NAME = os.environ.get('LOCAL_WHISPER_MODEL', 'tiny') or 'tiny'
@@ -36,12 +40,29 @@ def _get_model():
         return None
 
 
+def _bounded_audio(path: Path):
+    handle=tempfile.NamedTemporaryFile(prefix='ad_transcribe_',suffix='.wav',delete=False);clip=Path(handle.name);handle.close()
+    try:
+        p=subprocess.run(
+            [get_ffmpeg_exe(),'-y','-t',str(MAX_SECONDS),'-i',str(path),'-vn','-ac','1','-ar','16000','-c:a','pcm_s16le',str(clip)],
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=MAX_SECONDS+60,
+        )
+        if p.returncode:raise RuntimeError((p.stderr or p.stdout or 'FFmpeg transcription clip failed')[-1200:])
+        return clip
+    except Exception:
+        try:clip.unlink(missing_ok=True)
+        except Exception:pass
+        raise
+
+
 def transcribe_clip(path: Path):
     model = _get_model()
     if model is None:return {'enabled': False, 'model': None, 'segments': [], 'words': [], 'text': ''}
+    clip=None
     try:
+        clip=_bounded_audio(path)
         segments, info = model.transcribe(
-            str(path),beam_size=1,best_of=1,vad_filter=True,
+            str(clip),beam_size=1,best_of=1,vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=320,speech_pad_ms=120),
             word_timestamps=True,condition_on_previous_text=False,temperature=0.0,language=None,
         )
@@ -74,6 +95,10 @@ def transcribe_clip(path: Path):
     except Exception as exc:
         print('Local transcription fallback:', type(exc).__name__, str(exc)[:180], flush=True)
         return {'enabled':False,'model':MODEL_NAME,'segments':[],'words':[],'text':'','error':type(exc).__name__}
+    finally:
+        if clip:
+            try:clip.unlink(missing_ok=True)
+            except Exception:pass
 
 
 def speech_window_near(transcript, at: float, window: float = 2.6):
@@ -136,7 +161,7 @@ def apply_segment_captions(plan: dict, sources: list[dict]):
     for i,seg in enumerate(plan.get('segments',[])):
         src=by_id.get(str(seg.get('assetId')))
         if not src:continue
-        start=float(seg.get('start',0));end=start+float(seg.get('duration',0) or 0)
+        start=float(seg.get('start',0));duration=float(seg.get('duration',0) or 0);speed=max(.85,min(1.25,float(seg.get('speed',1.0) or 1.0)));end=start+duration*speed
         phrase=caption_for_window(src.get('transcript') or {},start,end,78)
         if not phrase:continue
         if not seg.get('caption') or i==0:

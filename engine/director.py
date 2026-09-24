@@ -119,6 +119,18 @@ def _segment(m,fit,zoom,caption=''):
     }
 
 
+def _bound_segment_speeds(plan,sources):
+    """Keep styled source windows inside each asset while preserving output duration."""
+    durations={str(s.get('id')):max(0.0,float(s.get('duration',0) or 0)) for s in sources}
+    for seg in plan.get('segments') or []:
+        total=durations.get(str(seg.get('assetId')),0.0);duration=max(0.0,float(seg.get('duration',0) or 0));start=max(0.0,float(seg.get('start',0) or 0))
+        speed=max(.85,min(1.25,float(seg.get('speed',1) or 1)))
+        if total>0 and duration>0:
+            available=max(0.0,total-start);speed=min(speed,max(.85,available/duration))
+        seg['speed']=round(speed,3)
+    return plan
+
+
 def make_plan(project,sources,style,profile,context,target,strategy,variant=0,revision=0,intensity='balanced',hook_style='auto'):
     pool=_dedupe(_order(_moments(sources),strategy,variant));pace=_duration(style,profile,strategy,revision,intensity)
     target=max(8,min(35,int(target)));needed=max(4,min(20,math.ceil(target/max(.72,pace*.92))))
@@ -183,6 +195,7 @@ def choose_plan(project,sources,style,profile,context,target,variant=0,revision=
     for strategy in allowed:
         plan=make_plan(project,sources,effective,profile,context,target,strategy,variant,revision,intensity,hook_style)
         plan=decorate_plan(plan,visual_style,mode,intensity,variant)
+        plan=_bound_segment_speeds(plan,sources)
         score,why=predict(plan,effective,context,target);plan['predictedRetention']=score;plan['prediction']=why;plan['directorMode']=mode;candidates.append(plan)
     candidates.sort(key=lambda x:x['predictedRetention'],reverse=True)
     pick=min(max(0,int(variant)),len(candidates)-1);winner=candidates[pick]
