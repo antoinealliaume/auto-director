@@ -20,9 +20,16 @@ from engine.director import choose_plan
 from engine.local_ai import critic_video,enabled as local_ai_enabled,refine_plan
 from engine.rendering import critic,render_plan
 
+
+def _bounded_env_int(name,default,minimum,maximum):
+    try:value=int(os.environ.get(name,str(default)))
+    except (TypeError,ValueError):value=default
+    return max(minimum,min(maximum,value))
+
+
 STUDIO_URL=os.environ.get('STUDIO_URL','https://auto-director-web.onrender.com').rstrip('/')
 WORKER_TOKEN=os.environ.get('WORKER_TOKEN','').strip();PROFILE_NAME=os.environ.get('PROFILE_NAME','safe-unknown');MODEL=os.environ.get('LOCAL_VLM_MODEL','qwen2.5vl:3b')
-POLL_SECONDS=max(2,min(15,int(os.environ.get('WORKER_POLL_SECONDS','4'))));RENEW_SECONDS=max(1800,min(6*3600,int(os.environ.get('WORKER_RENEW_SECONDS','10800'))))
+POLL_SECONDS=_bounded_env_int('WORKER_POLL_SECONDS',4,2,15);RENEW_SECONDS=_bounded_env_int('WORKER_RENEW_SECONDS',10800,1800,6*3600)
 STOP=threading.Event();TOKEN_LOCK=threading.Lock()
 if not WORKER_TOKEN:raise SystemExit('WORKER_TOKEN manquant. Lance le worker depuis le Studio ou le lanceur officiel.')
 
@@ -46,7 +53,8 @@ def renew_token():
 
 def renew_loop():
     while not STOP.wait(RENEW_SECONDS):
-        if not renew_token():STOP.wait(60)
+        while not renew_token():
+            if STOP.wait(60):return
 
 def heartbeat_payload():return {'engine':ENGINE_VERSION,'protocol':2,'agentVersion':'2.8','profile':PROFILE_NAME,'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,'localAI':bool(local_ai_enabled()),'model':MODEL if local_ai_enabled() else None,'styleEngine':True}
 def heartbeat_loop():
