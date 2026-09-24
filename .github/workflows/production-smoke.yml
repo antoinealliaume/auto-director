@@ -23,8 +23,15 @@ jobs:
       - name: Wait for Render and verify the deployed release
         env:
           EXPECTED_COMMIT: ${{ github.event.workflow_run.head_sha }}
-        run: >-
-          python tools/production_smoke.py
-          --url https://auto-director-web.onrender.com
-          --expected-commit "$EXPECTED_COMMIT"
-          --wait-seconds 600
+        run: |
+          CURRENT_MAIN="$(git rev-parse HEAD)"
+          if [ -z "$EXPECTED_COMMIT" ]; then
+            EXPECTED_COMMIT="$CURRENT_MAIN"
+          elif [ "$EXPECTED_COMMIT" != "$CURRENT_MAIN" ]; then
+            echo "Skipping stale smoke run for $EXPECTED_COMMIT; current main is $CURRENT_MAIN."
+            exit 0
+          fi
+          python tools/production_smoke.py \
+            --url https://auto-director-web.onrender.com \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --wait-seconds 600
