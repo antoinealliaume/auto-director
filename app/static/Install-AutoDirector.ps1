@@ -17,27 +17,86 @@ function Test-RealPython([string]$Path) {
 }
 function Resolve-RealPython {
   $candidates = New-Object System.Collections.Generic.List[string]
+  $configuredPython=[Environment]::GetEnvironmentVariable('AUTO_DIRECTOR_PYTHON','User')
+  if($configuredPython){$candidates.Add($configuredPython)}
+  if($env:AUTO_DIRECTOR_PYTHON -and $env:AUTO_DIRECTOR_PYTHON -ne $configuredPython){$candidates.Add($env:AUTO_DIRECTOR_PYTHON)}
   foreach($p in @((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'),(Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),(Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'),(Join-Path $env:ProgramFiles 'Python313\python.exe'),(Join-Path $env:ProgramFiles 'Python312\python.exe'),(Join-Path $env:ProgramFiles 'Python311\python.exe'))){if($p){$candidates.Add($p)}}
   try{Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Python') -Directory -ErrorAction SilentlyContinue|Sort-Object Name -Descending|ForEach-Object{$p=Join-Path $_.FullName 'python.exe';if(Test-Path $p){$candidates.Add($p)}}}catch{}
+  try{Get-ChildItem $env:ProgramFiles -Directory -Filter 'Python3*' -ErrorAction SilentlyContinue|Sort-Object Name -Descending|ForEach-Object{$p=Join-Path $_.FullName 'python.exe';if(Test-Path $p){$candidates.Add($p)}}}catch{}
   try{$cmd=Get-Command python.exe -ErrorAction SilentlyContinue;if($cmd -and $cmd.Source -and $cmd.Source -notmatch '\\WindowsApps\\'){$candidates.Add($cmd.Source)}}catch{}
   foreach($p in $candidates){if(Test-RealPython $p){return $p}}
-  try{$py=Get-Command py.exe -ErrorAction SilentlyContinue;if($py){foreach($selector in @('-3.13','-3.12','-3.11','-3')){$old=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$resolved=& $py.Source $selector -c "import sys; print(sys.executable)" 2>$null;if($LASTEXITCODE -eq 0 -and $resolved){$path=([string]($resolved|Select-Object -Last 1)).Trim();if(Test-RealPython $path){return $path}}}catch{}finally{$ErrorActionPreference=$old}}}}catch{}
+  try{$py=Get-Command py.exe -ErrorAction SilentlyContinue;if($py){foreach($selector in @('-3.14','-3.13','-3.12','-3.11','-3.10','-3')){$old=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$resolved=& $py.Source $selector -c "import sys; print(sys.executable)" 2>$null;if($LASTEXITCODE -eq 0 -and $resolved){$path=([string]($resolved|Select-Object -Last 1)).Trim();if(Test-RealPython $path){return $path}}}catch{}finally{$ErrorActionPreference=$old}}}}catch{}
   return $null
 }
 function Stop-PreviousAutoDirector {
   Write-Host 'Arrêt de l ancien agent/worker...' -ForegroundColor Cyan
-  try{Invoke-RestMethod -Method Post -Uri $AgentStopUrl -ContentType 'application/json' -Body '{}' -TimeoutSec 3|Out-Null}catch{}
-  try{$agents=Get-CimInstance Win32_Process|Where-Object{$_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match 'local_agent\.ps1'};foreach($p in $agents){try{Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop}catch{}}}catch{}
+  $rootPattern=[regex]::Escape($InstallRoot)+'[\\/]'
+  try{
+    $status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2
+    if(([string]$status.installRoot) -eq $InstallRoot){
+      Invoke-RestMethod -Method Post -Uri $AgentStopUrl -ContentType 'application/json' -Body '{}' -TimeoutSec 3|Out-Null
+    }
+  }catch{}
+  try{
+    $agents=Get-CimInstance Win32_Process|Where-Object{
+      $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $rootPattern -and $_.CommandLine -match 'local_agent\.ps1'
+    }
+    foreach($p in $agents){try{Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop}catch{}}
+  }catch{}
+  try{
+    $workers=Get-CimInstance Win32_Process|Where-Object{
+      $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $rootPattern -and
+      ($_.CommandLine -match 'run_worker_logged\.ps1' -or $_.CommandLine -match 'START_LOCAL_WORKER_WINDOWS\.ps1' -or $_.CommandLine -match 'http_worker\.py' -or $_.CommandLine -match 'http_worker_v2\.py')
+    }
+    foreach($p in $workers){try{& taskkill.exe /PID $p.ProcessId /T /F|Out-Null}catch{}}
+  }catch{}
   Start-Sleep -Milliseconds 900
+  $remaining=Get-CimInstance Win32_Process -ErrorAction Stop|Where-Object{
+    $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $rootPattern -and
+    ($_.CommandLine -match 'local_agent\.ps1' -or $_.CommandLine -match 'run_worker_logged\.ps1' -or $_.CommandLine -match 'START_LOCAL_WORKER_WINDOWS\.ps1' -or $_.CommandLine -match 'http_worker\.py' -or $_.CommandLine -match 'http_worker_v2\.py')
+  }
+  if($remaining){
+    $remainingIds=($remaining|ForEach-Object{[string]$_.ProcessId}) -join ', '
+    throw "Impossible d arrêter complètement l ancienne installation Auto Director (PID: $remainingIds)."
+  }
+}
+function Restore-PreviousAgentAfterStopFailure {
+  try{
+    $status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2
+    if(([string]$status.installRoot) -eq $InstallRoot){
+      Write-Host 'Mise à jour annulée : agent existant toujours actif.' -ForegroundColor Yellow
+      return
+    }
+  }catch{}
+  $previousAgent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1'
+  if(-not(Test-Path $previousAgent)){throw 'Agent précédent introuvable après l échec de l arrêt.'}
+  $previousPsi=New-Object System.Diagnostics.ProcessStartInfo;$previousPsi.FileName='powershell.exe';$previousPsi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$previousAgent`"";$previousPsi.UseShellExecute=$false;$previousPsi.CreateNoWindow=$true;$previousPsi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
+  $previousProc=[System.Diagnostics.Process]::Start($previousPsi)
+  if(-not $previousProc){throw 'Impossible de redémarrer l agent précédent après l échec de l arrêt.'}
+  Start-Sleep -Milliseconds 1200
+  if($previousProc.HasExited){throw 'L agent précédent s est arrêté immédiatement après l échec de l arrêt.'}
+  $deadline=[DateTime]::UtcNow.AddSeconds(5)
+  while([DateTime]::UtcNow -lt $deadline){
+    try{$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2;if(([string]$status.installRoot) -eq $InstallRoot){Write-Host 'Agent précédent rétabli après abandon de la mise à jour.' -ForegroundColor Yellow;return}}catch{}
+    Start-Sleep -Milliseconds 500
+  }
+  throw 'L agent précédent a redémarré mais ne répond pas sur le port local 8765.'
 }
 function Wait-ForAgent {
   $deadline=[DateTime]::UtcNow.AddSeconds(18);$lastVersion=$null
-  while([DateTime]::UtcNow -lt $deadline){try{$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2;if($status.agentVersion){$lastVersion=[string]$status.agentVersion;try{if([version]$lastVersion -ge $ExpectedAgentVersion){return $status}}catch{}}}catch{};Start-Sleep -Milliseconds 650}
+  while([DateTime]::UtcNow -lt $deadline){try{$status=Invoke-RestMethod -Method Get -Uri $AgentStatusUrl -TimeoutSec 2;if($status.agentVersion){$lastVersion=[string]$status.agentVersion;try{if([version]$lastVersion -ge $ExpectedAgentVersion -and ([string]$status.installRoot -eq $InstallRoot)){return $status}}catch{}}}catch{};Start-Sleep -Milliseconds 650}
   if($lastVersion){throw "Ancien agent encore actif (version $lastVersion). Redémarre Windows puis relance cet installateur."};throw 'Le nouvel agent Auto Director ne répond pas sur le port local 8765.'
 }
 
 Write-Host '=== Auto Director V9.2 Style Engine - installation / mise a jour du worker PC ===' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallRoot|Out-Null
+$InstallLockPath=Join-Path $InstallRoot 'install.lock'
+try{
+  # Garde le handle ouvert pendant tout le processus afin de sérialiser les mises à jour.
+  $InstallLock=[System.IO.File]::Open($InstallLockPath,[System.IO.FileMode]::OpenOrCreate,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::None)
+}catch [System.IO.IOException]{
+  throw 'Une installation ou mise à jour Auto Director est déjà en cours.'
+}
 $PythonExe=Resolve-RealPython
 if(-not $PythonExe){
   Write-Host 'Python >= 3.10 absent. Installation automatique de Python 3.12...' -ForegroundColor Yellow;$winget=Get-Command winget.exe -ErrorAction SilentlyContinue
@@ -48,7 +107,6 @@ if(-not $PythonExe){
   if(-not $PythonExe){throw 'Python a été installé mais reste introuvable. Redémarre Windows puis relance cet installateur.'}
 }
 Write-Host "Python valide: $PythonExe" -ForegroundColor Green
-Stop-PreviousAutoDirector
 Write-Host 'Téléchargement de Auto Director V9.2 Style Engine...' -ForegroundColor Cyan
 try{Remove-Item $TempZip -Force -ErrorAction SilentlyContinue}catch{}
 Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing -Headers @{'Cache-Control'='no-cache'}
@@ -60,17 +118,76 @@ if(-not(Test-Path $SourceRunner)){throw 'Package Auto Director invalide : runner
 $Backup=Join-Path $InstallRoot 'repo.previous'
 if(Test-Path $Backup){Remove-Item $Backup -Recurse -Force}
 try{
+  Stop-PreviousAutoDirector
+}catch{
+  $stopFailure=$_.Exception.Message
+  try{Restore-PreviousAgentAfterStopFailure}catch{
+    $restartFailure=$_.Exception.Message
+    throw "Mise à jour annulée avant remplacement ; l agent précédent n a pas pu être rétabli : $restartFailure. Échec de l arrêt : $stopFailure"
+  }
+  throw "Mise à jour annulée avant remplacement ; installation précédente conservée : $stopFailure"
+}
+try{
   if(Test-Path $RepoRoot){Move-Item $RepoRoot $Backup}
   Move-Item $Source $RepoRoot
 }catch{
-  try{if((-not(Test-Path $RepoRoot)) -and (Test-Path $Backup)){Move-Item $Backup $RepoRoot}}catch{}
-  throw
+  $swapFailure=$_.Exception.Message
+  if(Test-Path $Backup){
+    try{
+      if(Test-Path $RepoRoot){Remove-Item $RepoRoot -Recurse -Force}
+      Move-Item $Backup $RepoRoot
+      Write-Host 'Remplacement annulé : version précédente restaurée.' -ForegroundColor Yellow
+    }catch{
+      throw "Le remplacement du dépôt a échoué et la restauration de la version précédente a échoué : $swapFailure"
+    }
+    try{
+      $restoredAgent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1'
+      $restoredPsi=New-Object System.Diagnostics.ProcessStartInfo;$restoredPsi.FileName='powershell.exe';$restoredPsi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$restoredAgent`"";$restoredPsi.UseShellExecute=$false;$restoredPsi.CreateNoWindow=$true;$restoredPsi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
+      $restoredProc=[System.Diagnostics.Process]::Start($restoredPsi)
+      if(-not $restoredProc){throw 'Impossible de redémarrer l agent précédent.'}
+      Start-Sleep -Milliseconds 1200
+      if($restoredProc.HasExited){throw 'L agent précédent s est arrêté immédiatement après restauration.'}
+      Write-Host 'Agent précédent redémarré après échec du remplacement.' -ForegroundColor Yellow
+    }catch{
+      $restartFailure=$_.Exception.Message
+      throw "Version précédente restaurée, mais son agent n a pas redémarré : $restartFailure. Échec du remplacement : $swapFailure"
+    }
+    throw "Mise à jour annulée ; version précédente restaurée après échec du remplacement : $swapFailure"
+  }
+  throw "Installation interrompue pendant le remplacement du dépôt : $swapFailure"
 }
 $Agent=Join-Path $RepoRoot 'self_hosted_worker\local_agent.ps1';$Runner=Join-Path $RepoRoot 'self_hosted_worker\run_worker_logged.ps1'
 if(-not(Test-Path $Agent)){throw 'Agent local introuvable après installation.'};if(-not(Test-Path $Runner)){throw 'Runner worker introuvable après installation.'}
-[Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON',$PythonExe,'User');$env:AUTO_DIRECTOR_PYTHON=$PythonExe
-$StartupDir=[Environment]::GetFolderPath('Startup');$StartupCmd=Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd';$cmd="@echo off`r`nset `"AUTO_DIRECTOR_PYTHON=$PythonExe`"`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"`r`n";Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
-Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
-$psi=New-Object System.Diagnostics.ProcessStartInfo;$psi.FileName='powershell.exe';$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"";$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe;$proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le nouvel agent.'};$status=Wait-ForAgent
+$psi=New-Object System.Diagnostics.ProcessStartInfo;$psi.FileName='powershell.exe';$psi.Arguments="-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Agent`"";$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.EnvironmentVariables['AUTO_DIRECTOR_PYTHON']=$PythonExe
+try{
+  [Environment]::SetEnvironmentVariable('AUTO_DIRECTOR_PYTHON',$PythonExe,'User');$env:AUTO_DIRECTOR_PYTHON=$PythonExe
+  $StartupDir=[Environment]::GetFolderPath('Startup');$StartupCmd=Join-Path $StartupDir 'AutoDirectorLocalAgent.cmd';$cmd="@echo off`r`nstart `"Auto Director Local Agent`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"%LOCALAPPDATA%\AutoDirector\repo\self_hosted_worker\local_agent.ps1`"`r`n";Set-Content -Path $StartupCmd -Value $cmd -Encoding ASCII
+  Write-Host 'Démarrage du nouvel agent...' -ForegroundColor Cyan
+  $proc=[System.Diagnostics.Process]::Start($psi);if(-not $proc){throw 'Impossible de démarrer le nouvel agent.'};$status=Wait-ForAgent
+}catch{
+  $failure=$_.Exception.Message
+  try{Stop-PreviousAutoDirector}catch{}
+  if(Test-Path $Backup){
+    try{
+      if(Test-Path $RepoRoot){Remove-Item $RepoRoot -Recurse -Force}
+      Move-Item $Backup $RepoRoot
+      Write-Host 'Mise à jour annulée : version précédente restaurée.' -ForegroundColor Yellow
+    }catch{
+      throw "Le nouvel agent n a pas démarré et la restauration de la version précédente a échoué : $failure"
+    }
+    try{
+      $restoredProc=[System.Diagnostics.Process]::Start($psi)
+      if(-not $restoredProc){throw 'Impossible de redémarrer l agent précédent.'}
+      Start-Sleep -Milliseconds 1200
+      if($restoredProc.HasExited){throw 'L agent précédent s est arrêté immédiatement après restauration.'}
+      Write-Host 'Agent précédent redémarré après restauration.' -ForegroundColor Yellow
+    }catch{
+      $restartFailure=$_.Exception.Message
+      throw "Version précédente restaurée, mais son agent n a pas redémarré : $restartFailure. Échec initial : $failure"
+    }
+    throw "Mise à jour annulée ; version précédente restaurée : $failure"
+  }
+  throw "Installation interrompue : $failure"
+}
 try{Remove-Item $TempZip -Force -ErrorAction SilentlyContinue}catch{};try{Remove-Item $TempExtract -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 Write-Host '';Write-Host ("Installation V9.2 terminée. Agent PC version "+$status.agentVersion+" actif.") -ForegroundColor Green;Write-Host 'Le Style Engine et le Quality Engine utiliseront automatiquement les composants disponibles sur ton PC.' -ForegroundColor Green;Write-Host 'Retourne dans Auto Director puis clique sur Démarrer le worker PC.' -ForegroundColor Green;Write-Host 'Aucun secret PostgreSQL/Redis n est envoyé au PC.' -ForegroundColor DarkGray;Start-Sleep -Seconds 4
