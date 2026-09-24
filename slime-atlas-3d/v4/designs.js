@@ -14,6 +14,8 @@ uniform highp int uDesign; uniform float uTier,uPart,uBodyTop;
 out vec3 vRest;
 vec3 evolve(vec3 p) {
  if(uDesign==0) return p;
+ bool facial=uPart>2.5&&uPart<5.5&&!(abs(p.x)>.65&&p.z<.25);
+ if(facial) return p;
  float level=uTier/4.;
  // Enlarge the existing crown above the forehead; facial vertices stay fixed.
  float crown=smoothstep(uBodyTop*.88,uBodyTop*1.13,p.y);
