@@ -31,10 +31,15 @@ def _nearest(values,at):
 def analyze_audio(path:Path):
     global _failed
     if not enabled() or not AUDIO_ENABLED:return {'enabled':False,'beats':[],'onsets':[]}
-    wav=None
     try:
         import librosa
         import numpy as np
+    except Exception as exc:
+        _failed=True
+        print('Local quality audio disabled:',type(exc).__name__,str(exc)[:160],flush=True)
+        return {'enabled':False,'beats':[],'onsets':[],'error':type(exc).__name__}
+    wav=None
+    try:
         handle=tempfile.NamedTemporaryFile(prefix='ad_quality_',suffix='.wav',delete=False);wav=Path(handle.name);handle.close()
         run([FFMPEG,'-y','-t',str(MAX_SECONDS),'-i',str(path),'-vn','-ac','1','-ar','22050','-c:a','pcm_s16le',str(wav)],180)
         y,sr=librosa.load(str(wav),sr=22050,mono=True,duration=MAX_SECONDS)
@@ -53,8 +58,7 @@ def analyze_audio(path:Path):
         dynamic=float(np.percentile(rms,90)-np.percentile(rms,25)) if len(rms) else 0.0
         return {'enabled':True,'beats':beats,'onsets':onsets,'tempoBpm':round(tempo,1),'audioDynamics':round(dynamic,5)}
     except Exception as exc:
-        _failed=True
-        print('Local quality audio disabled:',type(exc).__name__,str(exc)[:160],flush=True)
+        print('Local quality audio fallback:',type(exc).__name__,str(exc)[:160],flush=True)
         return {'enabled':False,'beats':[],'onsets':[],'error':type(exc).__name__}
     finally:
         if wav:
