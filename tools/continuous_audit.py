@@ -130,7 +130,17 @@ def audit_runtime() -> None:
 
     pip_audit = shutil.which("pip-audit")
     if pip_audit:
-        run_check("Dependency vulnerability audit", [pip_audit, "-r", "requirements.txt", "--progress-spinner", "off"], timeout=300)
+        manifests = (
+            "requirements.txt",
+            "self_hosted_worker/requirements-local.txt",
+            "self_hosted_worker/requirements-quality.txt",
+        )
+        for manifest in manifests:
+            run_check(
+                f"Dependency vulnerability audit: {manifest}",
+                [pip_audit, "-r", manifest, "--progress-spinner", "off"],
+                timeout=300,
+            )
     else:
         add_finding("info", "security", "pip-audit indisponible", "Installer pip-audit dans le job d'audit pour vérifier les vulnérabilités connues.")
 
