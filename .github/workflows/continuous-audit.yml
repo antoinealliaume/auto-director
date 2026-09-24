@@ -1,6 +1,9 @@
 name: Auto Director Continuous Audit
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch:
@@ -48,24 +51,46 @@ jobs:
           retention-days: 14
 
       - name: Publish latest report branch
+        id: publish_report
         shell: bash
         run: |
           set -euo pipefail
+          audited_sha="$(git rev-parse HEAD)"
+          git fetch origin main
+          current_main_sha="$(git rev-parse origin/main)"
+          if [ "$audited_sha" != "$current_main_sha" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping stale audit publish: audited $audited_sha, main is $current_main_sha"
+            exit 0
+          fi
+
           mkdir -p /tmp/auto-director-audit
           cp audit/AUTO_DIRECTOR_AUDIT.md /tmp/auto-director-audit/
           cp audit/AUTO_DIRECTOR_AUDIT.json /tmp/auto-director-audit/
           git config user.name 'auto-director-audit[bot]'
           git config user.email 'auto-director-audit[bot]@users.noreply.github.com'
-          git fetch origin main
           git switch -C automation/audit-report origin/main
           mkdir -p audit
           cp /tmp/auto-director-audit/AUTO_DIRECTOR_AUDIT.md audit/
           cp /tmp/auto-director-audit/AUTO_DIRECTOR_AUDIT.json audit/
           git add audit/AUTO_DIRECTOR_AUDIT.md audit/AUTO_DIRECTOR_AUDIT.json
-          git commit -m 'chore(audit): refresh continuous report [skip ci]' || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(audit): refresh continuous report [skip ci]'
+          fi
+
+          git fetch origin main
+          current_main_sha="$(git rev-parse origin/main)"
+          if [ "$audited_sha" != "$current_main_sha" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping stale audit push: audited $audited_sha, main advanced to $current_main_sha"
+            exit 0
+          fi
+
           git push --force origin automation/audit-report
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       - name: Update continuous audit issue
+        if: steps.publish_report.outputs.published == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
