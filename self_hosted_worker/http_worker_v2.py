@@ -11,6 +11,7 @@ from transcription import apply_segment_captions, enabled as transcription_enabl
 
 _original_analyze=base.analyze_asset
 _original_refine=base.refine_plan
+_original_heartbeat=base.heartbeat_payload
 
 
 def analyze_with_intelligence(path,asset_id,name,role,metadata=None):
@@ -41,7 +42,7 @@ def refine_with_intelligence(project_name,plan,sources,paths,workdir):
 
 
 def heartbeat_with_features():
-    payload=base.heartbeat_payload();payload['transcription']=bool(transcription_enabled());payload['qualityEngine']=bool(quality_enabled());return payload
+    payload=_original_heartbeat();payload['transcription']=bool(transcription_enabled());payload['qualityEngine']=bool(quality_enabled());return payload
 
 
 base.analyze_asset=analyze_with_intelligence
