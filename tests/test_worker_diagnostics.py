@@ -32,6 +32,12 @@ class WorkerDiagnosticsTests(unittest.TestCase):
         self.assertIn("'automaticInstall':False", status)
         self.assertIn("'publicationMode':'manual-only'", status)
 
+    def test_v2_heartbeat_decorator_keeps_original_payload_callable(self):
+        worker_v2 = (ROOT / "self_hosted_worker/http_worker_v2.py").read_text(encoding="utf-8")
+        self.assertIn("_original_heartbeat=base.heartbeat_payload", worker_v2)
+        self.assertIn("payload=_original_heartbeat()", worker_v2)
+        self.assertNotIn("payload=base.heartbeat_payload()", worker_v2)
+
     def test_retry_queue_and_heartbeat_age_are_exposed_to_ui(self):
         server = (ROOT / "app/worker_status.py").read_text(encoding="utf-8")
         browser = (ROOT / "app/static/worker-status.js").read_text(encoding="utf-8")
