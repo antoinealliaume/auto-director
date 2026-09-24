@@ -124,7 +124,7 @@ def attach(app):
         if not compatibility['compatible']:raise HTTPException(409,'Worker incompatible: '+compatibility['reason'])
         with db() as c:
             c.execute('delete from worker_leases where lease_expires<=now()')
-            rows=c.execute("select id,project_id,variants,settings from jobs where status='queued' order by created_at asc for update skip locked limit 10").fetchall()
+            rows=c.execute("select id,project_id,variants,settings from jobs where status='queued' and (coalesce(settings->>'nextAttemptAt','') in ('','null') or (settings->>'nextAttemptAt')::timestamptz <= now()) order by created_at asc for update skip locked limit 10").fetchall()
             for row in rows:
                 lk='autodirector:lock:'+str(row[0])
                 if r.set(lk,'remote:'+wid,nx=True,ex=3600):
@@ -150,7 +150,9 @@ def attach(app):
         except Exception:
             try:r.delete(lock_key)
             except Exception:pass
-            with db() as c:c.execute("update jobs set status='queued',stage='queued',message='Replacé en file après erreur de claim',updated_at=now() where id=%s",(jid,));c.execute('delete from worker_leases where job_id=%s',(jid,))
+            with db() as c:
+                c.execute("update jobs set status='queued',stage='queued',message='Replacé en file après erreur de claim',updated_at=now() where id=%s and status='claimed'",(jid,))
+                c.execute('delete from worker_leases where job_id=%s',(jid,))
             raise
 
     async def asset(asset_id:str,jobId:str=Query(...),authorization:Optional[str]=Header(None)):
@@ -236,9 +238,10 @@ def attach(app):
         wid=require_worker(authorization);jid=uuid.UUID(job_id);_,settings,_=check_lease(jid,wid,False);plan=retry_plan(settings)
         with db() as c:
             if plan['allowed']:
-                c.execute("update jobs set status='queued',stage='retry_wait',progress=0,message=%s,settings=%s,updated_at=now() where id=%s",(f"Nouvelle tentative {plan['attempt']}/2 dans {plan['delaySeconds']} s · {x.error[:300]}",Jsonb(plan['settings']),jid))
-                c.execute("insert into job_events(job_id,stage,message) values(%s,'retry_wait',%s)",(jid,f"Backoff {plan['delaySeconds']} s"))
-            else:c.execute("update jobs set status='failed',stage='error',progress=0,message=%s,updated_at=now() where id=%s",(x.error[:500],jid))
+                updated=c.execute("update jobs set status='queued',stage='retry_wait',progress=0,message=%s,settings=%s,updated_at=now() where id=%s and status in ('claimed','running') returning id",(f"Nouvelle tentative {plan['attempt']}/2 dans {plan['delaySeconds']} s · {x.error[:300]}",Jsonb(plan['settings']),jid)).fetchone()
+                if updated:c.execute("insert into job_events(job_id,stage,message) values(%s,'retry_wait',%s)",(jid,f"Backoff {plan['delaySeconds']} s"))
+            else:updated=c.execute("update jobs set status='failed',stage='error',progress=0,message=%s,updated_at=now() where id=%s and status in ('claimed','running') returning id",(x.error[:500],jid)).fetchone()
+            if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')
             c.execute('delete from worker_leases where job_id=%s',(jid,))
         if plan['allowed']:rq().zadd(RETRY_KEY,{str(jid):time.time()+plan['delaySeconds']})
         try:rq().delete('autodirector:lock:'+str(jid))

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -57,6 +58,52 @@ class JobLifecycleV2Tests(unittest.TestCase):
     def test_cancellation_is_terminal(self):
         self.assertTrue(can_transition("running","cancelled"))
         self.assertFalse(can_transition("cancelled","running"))
+
+    def test_worker_failure_cannot_resurrect_cancelled_job(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"local_worker_api2.py").read_text(encoding="utf-8")
+        fail_block=source.split("    async def fail(",1)[1].split("    app.add_api_route",1)[0]
+        guard="where id=%s and status in ('claimed','running') returning id"
+        self.assertEqual(fail_block.count(guard),2)
+        self.assertIn("if not updated:raise HTTPException(409,'Job annulé ou déjà terminé')",fail_block)
+        self.assertLess(fail_block.index("if not updated"),fail_block.index("if plan['allowed']:rq().zadd"))
+
+    def test_claim_error_recovery_cannot_resurrect_cancelled_job(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"local_worker_api2.py").read_text(encoding="utf-8")
+        claim_block=source.split("    async def claim(",1)[1].split("    async def asset(",1)[0]
+        self.assertEqual(claim_block.count("where id=%s and status='claimed'"),1)
+        self.assertIn("delete from worker_leases where job_id=%s",claim_block)
+
+    def test_pc_worker_claim_respects_retry_backoff(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"local_worker_api2.py").read_text(encoding="utf-8")
+        claim_block=source.split("    async def claim(",1)[1].split("    async def asset(",1)[0]
+        self.assertIn("coalesce(settings->>'nextAttemptAt','') in ('','null')",claim_block)
+        self.assertIn("(settings->>'nextAttemptAt')::timestamptz <= now()",claim_block)
+
+    def test_pc_worker_completion_conflict_is_treated_as_cancellation(self):
+        source=(Path(__file__).resolve().parents[1]/"self_hosted_worker"/"http_worker.py").read_text(encoding="utf-8")
+        process_block=source.split("def process_remote_job(job):",1)[1].split("def claim_job():",1)[0]
+        conflict="if r.status_code==409:raise RuntimeError('JOB_CANCELLED')"
+        self.assertIn("/api/local-worker/jobs/{jid}/complete",process_block)
+        self.assertIn(conflict,process_block)
+        self.assertLess(process_block.index(conflict),process_block.index("r.raise_for_status()",process_block.index(conflict)))
+
+    def test_cloud_recovery_cannot_resurrect_cancelled_job(self):
+        source=(Path(__file__).resolve().parents[1]/"engine"/"config.py").read_text(encoding="utf-8")
+        recovery_block=source.split("def recover_stale_jobs():",1)[1]
+        guard="where id=%s and status in ('claimed','running') returning id"
+        self.assertIn(guard,recovery_block)
+        self.assertIn("if not changed:continue",recovery_block)
+        self.assertLess(recovery_block.index("if not changed:continue"),recovery_block.index("queue.delete('autodirector:lock:'"))
+
+    def test_manual_retry_is_serialized_before_runtime_cleanup(self):
+        source=(Path(__file__).resolve().parents[1]/"app"/"main.py").read_text(encoding="utf-8")
+        retry_block=source.split("def retry_job(",1)[1].split("@app.get(\"/api/jobs/{job_id}/events\")",1)[0]
+        self.assertIn("select status,output_asset_ids from jobs where id=%s for update",retry_block)
+        self.assertIn("where id=%s and status in ('failed','cancelled') returning id",retry_block)
+        self.assertLess(retry_block.index("for update"),retry_block.index("queue.lrem"))
+        self.assertLess(retry_block.index("delete from worker_leases"),retry_block.index("update jobs set status='queued'"))
+        self.assertNotIn("_clear_runtime_job_state(jid)",retry_block)
+        self.assertNotIn("_delete_job_outputs(jid)",retry_block)
 
     def test_structured_logs_correlate_request_and_job(self):
         token=set_request_id('request-123')

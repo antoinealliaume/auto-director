@@ -467,23 +467,39 @@ def cancel_job(job_id: str, authorization: Optional[str] = Header(None)):
 def retry_job(job_id: str, authorization: Optional[str] = Header(None)):
     require_auth(authorization)
     jid = parse_uuid(job_id, "Job")
+    storage_rows = []
     with db() as c:
-        row = c.execute("select status from jobs where id=%s", (jid,)).fetchone()
-    if not row:
-        raise HTTPException(404, "Job introuvable")
-    if row[0] not in {"failed", "cancelled"}:
-        raise HTTPException(409, "Ce job ne peut pas être relancé")
-    _clear_runtime_job_state(jid)
-    _delete_job_outputs(jid)
-    with db() as c:
-        c.execute(
+        row = c.execute("select status,output_asset_ids from jobs where id=%s for update", (jid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Job introuvable")
+        if row[0] not in {"failed", "cancelled"}:
+            raise HTTPException(409, "Ce job ne peut pas être relancé")
+        ids = list(row[1] or [])
+        storage_rows = c.execute("select storage_key from assets where id=any(%s)", (ids,)).fetchall() if ids else []
+        try:
+            queue.lrem(QUEUE_KEY, 0, str(jid))
+            queue.delete("autodirector:lock:" + str(jid))
+        except Exception:
+            pass
+        c.execute("delete from worker_leases where job_id=%s", (jid,))
+        if ids:
+            c.execute("delete from assets where id=any(%s)", (ids,))
+        updated = c.execute(
             """update jobs set status='queued',stage='queued',progress=0,message='Relancé manuellement',
                output_asset_ids='{}',critic_score=0,revision_count=0,strategy='',creative_brief='{}'::jsonb,
                settings=jsonb_set(settings-'nextAttemptAt','{automaticAttempts}','0'::jsonb,true),updated_at=now()
-               where id=%s""",
+               where id=%s and status in ('failed','cancelled') returning id""",
             (jid,),
-        )
+        ).fetchone()
+        if not updated:
+            raise HTTPException(409, "Ce job ne peut pas être relancé")
         c.execute("insert into job_events(job_id,stage,message) values(%s,'queued','Job relancé')", (jid,))
+    for (key,) in storage_rows:
+        if key:
+            try:
+                media_store.delete(key)
+            except Exception:
+                pass
     try:
         queue.lpush(QUEUE_KEY, str(jid))
     except Exception:
