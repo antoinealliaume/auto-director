@@ -24,6 +24,12 @@ class StaticFrontendBuildTests(unittest.TestCase):
             self.assertNotIn('/api/publications',source,relative)
             self.assertNotIn('/api/tiktok',source,relative)
 
+    def test_source_cards_read_canonical_director_analysis_metadata(self):
+        javascript=(ROOT/'app/static/app.js').read_text(encoding='utf-8')
+        self.assertIn('analysis=meta.directorAnalysis||meta.analysis||{}',javascript)
+        self.assertIn('meta.duration||analysis.duration||0',javascript)
+        self.assertIn('analysis.qualityScore||analysis.avgMomentScore||meta.qualityScore||0',javascript)
+
 
 if __name__ == '__main__':
     unittest.main()
