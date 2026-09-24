@@ -71,7 +71,7 @@ def main():
     OUT.write_text('\n'.join(f'{k}={v}' for k,v in profile.items())+'\n',encoding='utf-8')
     report={
         'profile':profile['PROFILE_NAME'],'ramGb':ram if ram>0 else 'inconnue','cpuThreads':cpu,'gpu':gpu['name'] or 'non detecte','vramGb':gpu['vram_gb'],
-        'localAI':profile['LOCAL_AI_AUTO_ENABLED']=='1','model':profile['LOCAL_VLM_MODEL'] if profile['LOCAL_AI_AUTO_ENABLED']=='1' else 'Director V9.1',
+        'localAI':profile['LOCAL_AI_AUTO_ENABLED']=='1','model':profile['LOCAL_VLM_MODEL'] if profile['LOCAL_AI_AUTO_ENABLED']=='1' else 'Director V9.2',
         'qualityEngine':profile['LOCAL_QUALITY_ENGINE']=='1','smartCrop':profile['SMART_CROP']=='1','beatAnalysis':profile['AUDIO_BEAT_ANALYSIS']=='1','advancedSceneDetect':profile['ADVANCED_SCENE_DETECT']=='1',
         'transcription':profile['LOCAL_TRANSCRIBE']=='1','whisperModel':profile['LOCAL_WHISPER_MODEL'] if profile['LOCAL_TRANSCRIBE']=='1' else 'off',
         'render':f"{profile['RENDER_WIDTH']}x{profile['RENDER_HEIGHT']}@{profile['RENDER_FPS']}",'crf':int(profile['RENDER_CRF']),'preset':profile['RENDER_PRESET'],

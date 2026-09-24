@@ -28,23 +28,23 @@ RECOVERY_SECONDS=max(30,min(300,int(os.environ.get('QUEUE_RECOVERY_SECONDS','60'
 def self_test():
     pid=aid=jid=None
     try:
-        print('SELFTEST V8 start',flush=True)
-        with tempfile.TemporaryDirectory(prefix='adv8_test_') as td:
+        print(f'SELFTEST V{ENGINE_VERSION} start',flush=True)
+        with tempfile.TemporaryDirectory(prefix='autodirector_selftest_') as td:
             p=Path(td)/'synthetic.mp4'
             run([FFMPEG,'-y','-f','lavfi','-i','testsrc2=size=640x360:rate=24','-f','lavfi','-i','sine=frequency=550:sample_rate=44100','-t','5','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(p)],120)
             blob=p.read_bytes()
         pid,aid,jid=uuid.uuid4(),uuid.uuid4(),uuid.uuid4()
         with db() as c:
-            c.execute("insert into projects(id,name,description) values(%s,'__SELFTEST_V8__','automatic V8 validation')",(pid,))
-            c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata) values(%s,%s,'selftest-v8.mp4','video/mp4',%s,'source','source',%s,'{}'::jsonb)",(aid,pid,len(blob),blob))
+            c.execute("insert into projects(id,name,description) values(%s,%s,%s)",(pid,'__SELFTEST__',f'automatic V{ENGINE_VERSION} validation'))
+            c.execute("insert into assets(id,project_id,name,content_type,size,role,kind,data,metadata) values(%s,%s,'selftest.mp4','video/mp4',%s,'source','source',%s,'{}'::jsonb)",(aid,pid,len(blob),blob))
             settings={'assetIds':[str(aid)],'captions':True,'voiceover':'off','autoRevision':False,'targetDuration':8}
-            c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,'selftest V8',1,%s)",(jid,pid,Jsonb(settings)))
+            c.execute("insert into jobs(id,project_id,status,stage,progress,message,variants,settings) values(%s,%s,'queued','queued',0,%s,1,%s)",(jid,pid,f'selftest V{ENGINE_VERSION}',Jsonb(settings)))
         process_job(str(jid))
         with db() as c:row=c.execute('select status,critic_score,output_asset_ids from jobs where id=%s',(jid,)).fetchone()
         ok=bool(row and row[0] in {'done','completed'} and row[2])
-        print('SELFTEST V8 PASS '+str(row[:2]) if ok else 'SELFTEST V8 FAIL '+str(row),flush=True)
+        print(f'SELFTEST V{ENGINE_VERSION} PASS '+str(row[:2]) if ok else f'SELFTEST V{ENGINE_VERSION} FAIL '+str(row),flush=True)
     except Exception as e:
-        print('SELFTEST V8 FAIL '+repr(e),flush=True)
+        print(f'SELFTEST V{ENGINE_VERSION} FAIL '+repr(e),flush=True)
     finally:
         if pid:
             try:
@@ -106,7 +106,7 @@ class Health(BaseHTTPRequestHandler):
             'localWorker':local_info,'cloudWorker':cloud_info,'engine':ENGINE_VERSION,
             'database':db_ok,'queue':q_ok,'queueDepth':queue_depth,'ffmpeg':ff_ok,
             'resolution':[RENDER_WIDTH,RENDER_HEIGHT],'fps':RENDER_FPS,'ffmpegThreads':FFMPEG_THREADS,
-            'ai':'local-vlm' if LOCAL_VLM_URL else 'director-v8',
+            'ai':'local-vlm' if LOCAL_VLM_URL else f'director-v{ENGINE_VERSION}',
             'capabilities':['moment-ranker','style-fingerprint','multi-plan-director','performance-memory','retention-critic','auto-revision','job-recovery','local-worker-priority','adaptive-safe-mode','durable-queue-recovery','worker-heartbeats']
         }).encode()
         self._headers(200 if db_ok and q_ok and ff_ok else 503,len(body));self.wfile.write(body)
@@ -141,7 +141,7 @@ def main():
             jid=next_job()
             if jid:process_job(jid)
         except Exception as e:
-            print('V8 worker loop error',repr(e),flush=True);time.sleep(2)
+            print(f'V{ENGINE_VERSION} worker loop error',repr(e),flush=True);time.sleep(2)
 
 
 if __name__=='__main__':main()
