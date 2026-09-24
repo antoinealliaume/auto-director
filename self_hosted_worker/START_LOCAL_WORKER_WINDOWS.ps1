@@ -30,4 +30,7 @@ if($env:LOCAL_QUALITY_ENGINE -eq '1'){
 
 $UseLocalAI=($env:LOCAL_AI_AUTO_ENABLED -eq '1' -and $env:LOCAL_VLM_URL);if($UseLocalAI){if(-not(Get-Command ollama -ErrorAction SilentlyContinue)){Write-Host 'Ollama absent: fallback Director V9.1.' -ForegroundColor Yellow;$env:LOCAL_VLM_URL=''}else{$ready=$false;try{Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3|Out-Null;$ready=$true}catch{try{Start-Process -FilePath 'ollama' -ArgumentList 'serve' -WindowStyle Hidden;Start-Sleep -Seconds 4;Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 5|Out-Null;$ready=$true}catch{$ready=$false}};if($ready){$model=if($env:LOCAL_VLM_MODEL){$env:LOCAL_VLM_MODEL}else{'qwen2.5vl:3b'};$installed=$false;try{$list=ollama list|Out-String;if($list -match [regex]::Escape($model)){$installed=$true}}catch{};if(-not $installed){try{ollama pull $model}catch{$env:LOCAL_VLM_URL=''}}}else{$env:LOCAL_VLM_URL=''}}}else{$env:LOCAL_VLM_URL=''}
 Write-Host 'Diagnostic sécurisé...' -ForegroundColor Cyan;& $VenvPython (Join-Path $PSScriptRoot 'doctor.py');if($LASTEXITCODE -ne 0){throw 'Le diagnostic a détecté un problème critique.'}
-Write-Host '';Write-Host 'Worker PC démarré. Il devient prioritaire sur Render quand son heartbeat HTTPS est reçu.' -ForegroundColor Green;& $VenvPython (Join-Path $PSScriptRoot 'http_worker_v2.py')
+Write-Host '';Write-Host 'Worker PC démarré. Il devient prioritaire sur Render quand son heartbeat HTTPS est reçu.' -ForegroundColor Green
+& $VenvPython (Join-Path $PSScriptRoot 'http_worker_v2.py')
+$workerCode=if($null -ne $LASTEXITCODE){[int]$LASTEXITCODE}else{1}
+exit $workerCode
