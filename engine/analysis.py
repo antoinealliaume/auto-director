@@ -34,16 +34,19 @@ def _pyscenedetect_cuts(path:Path,max_seconds=60):
         return []
 
 
-def scene_cuts(path:Path,max_seconds=60):
+def scene_cuts(path:Path,max_seconds=60,return_detector=False):
     advanced=_pyscenedetect_cuts(path,max_seconds)
-    if advanced:return advanced[:36]
-    p=run([FFMPEG,'-hide_banner','-t',str(max_seconds),'-i',str(path),'-vf',"select='gt(scene,0.27)',showinfo",'-an','-f','null','-'],180,False)
-    vals=[float(x) for x in re.findall(r'pts_time:([0-9.]+)',p.stderr or '')]
-    out=[]
-    for x in vals:
-        if x>.45 and (not out or x-out[-1]>=.45):out.append(round(x,2))
-        if len(out)>=32:break
-    return out
+    if advanced:
+        cuts=advanced[:36];detector='pyscenedetect'
+    else:
+        p=run([FFMPEG,'-hide_banner','-t',str(max_seconds),'-i',str(path),'-vf',"select='gt(scene,0.27)',showinfo",'-an','-f','null','-'],180,False)
+        vals=[float(x) for x in re.findall(r'pts_time:([0-9.]+)',p.stderr or '')]
+        cuts=[]
+        for x in vals:
+            if x>.45 and (not cuts or x-cuts[-1]>=.45):cuts.append(round(x,2))
+            if len(cuts)>=32:break
+        detector='ffmpeg'
+    return (cuts,detector) if return_detector else cuts
 
 
 def motion_score(path:Path,at:float):
@@ -137,7 +140,7 @@ def analyze_asset(path:Path,asset_id:str,name:str,role:str,metadata=None):
     old=(metadata or {}).get('directorAnalysis',{}) if isinstance(metadata,dict) else {}
     if isinstance(old,dict) and old.get('version')==ANALYSIS_VERSION:
         return {**old,'id':asset_id,'name':name,'role':role},False
-    duration,has_audio,res=probe(path);cuts=scene_cuts(path);shots=shots_from_cuts(duration,cuts);moments=[]
+    duration,has_audio,res=probe(path);cuts,scene_detector=scene_cuts(path,return_detector=True);shots=shots_from_cuts(duration,cuts);moments=[]
     for at in candidate_points(duration,cuts):
         mot=motion_score(path,at);aud=audio_score(path,at,has_audio)
         nearest=min([abs(at-c) for c in cuts],default=9.0);cut_bonus=max(0,1-nearest/1.25)
@@ -155,7 +158,7 @@ def analyze_asset(path:Path,asset_id:str,name:str,role:str,metadata=None):
     pace=statistics.median(gaps) if gaps else 2.1
     analysis={
         'version':ANALYSIS_VERSION,'duration':round(duration,2),'hasAudio':has_audio,'resolution':res,'cuts':cuts,'shots':shots[:40],
-        'sceneDetector':'pyscenedetect' if os.environ.get('ADVANCED_SCENE_DETECT','0')=='1' else 'ffmpeg',
+        'sceneDetector':scene_detector,
         'cutRate':round(len(cuts)/max(duration,1),3),'naturalPace':round(max(.85,min(3.8,pace)),2),'moments':moments[:max(7,MOMENT_SAMPLES)],
         'avgMomentScore':round(statistics.mean([m['score'] for m in moments[:5]]) if moments else 35.0,1),
     }
