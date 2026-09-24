@@ -45,6 +45,52 @@ class AdaptiveProfileTests(unittest.TestCase):
             self.assertEqual((p['RENDER_WIDTH'], p['RENDER_HEIGHT']), ('720','1280'))
             self.assertEqual(p['WORKER_CONCURRENCY'], '1')
 
+    def test_hardware_diagnostic_propagates_profile_detection_failure(self):
+        script = (ROOT / 'self_hosted_worker' / 'CHECK_MY_PC.bat').read_text(encoding='utf-8')
+        self.assertIn('set ERR=%ERRORLEVEL%', script)
+        self.assertIn('if not "%ERR%"=="0"', script)
+        self.assertIn('exit /b %ERR%', script)
+        self.assertLess(script.index('set ERR=%ERRORLEVEL%'), script.index('echo Le profil ci-dessus'))
+        self.assertLess(script.index('if not "%ERR%"=="0"'), script.index('echo Le profil ci-dessus'))
+
+    def test_hardware_diagnostic_uses_worker_compatible_python(self):
+        script = (ROOT / 'self_hosted_worker' / 'CHECK_MY_PC.bat').read_text(encoding='utf-8')
+        self.assertIn('AUTO_DIRECTOR_PYTHON', script)
+        self.assertIn('.venv-local\\Scripts\\python.exe', script)
+        self.assertIn('sys.version_info >= (3,10)', script)
+        self.assertIn('\\WindowsApps\\', script)
+        self.assertIn('where python.exe', script)
+        self.assertIn('py.exe %%S -c', script)
+        self.assertNotIn('where python >nul', script)
+        self.assertLess(script.index('AUTO_DIRECTOR_PYTHON'), script.index('where python.exe'))
+
+    def test_local_test_runner_uses_worker_compatible_python(self):
+        script = (ROOT / 'self_hosted_worker' / 'RUN_LOCAL_TESTS.bat').read_text(encoding='utf-8')
+        self.assertIn('AUTO_DIRECTOR_PYTHON', script)
+        self.assertIn('.venv-local\\Scripts\\python.exe', script)
+        self.assertIn('sys.version_info >= (3,10)', script)
+        self.assertIn('\\WindowsApps\\', script)
+        self.assertIn('where python.exe', script)
+        self.assertIn('py.exe %%S -c', script)
+        self.assertIn('"%PYTHON_EXE%" -m unittest tests.test_adaptive_profile -v', script)
+        self.assertIn('py.exe %PYTHON_SELECTOR% -m unittest tests.test_adaptive_profile -v', script)
+        self.assertNotIn('where python >nul', script)
+        self.assertLess(script.index('AUTO_DIRECTOR_PYTHON'), script.index('where python.exe'))
+
+    def test_worker_launcher_finds_all_supported_system_python_installs(self):
+        script = (ROOT / 'self_hosted_worker' / 'START_LOCAL_WORKER_WINDOWS.ps1').read_text(encoding='utf-8')
+        resolver = script.split('function Resolve-RealPython', 1)[1].split('$PythonExe=Resolve-RealPython', 1)[0]
+        self.assertIn("Get-ChildItem $env:ProgramFiles -Directory -Filter 'Python3*'", resolver)
+        self.assertIn("'-3.14'", resolver)
+        self.assertIn("'-3.10'", resolver)
+        self.assertIn('sys.version_info >= (3,10)', script)
+
+    def test_worker_launcher_ignores_stale_auto_profile_after_detection_failure(self):
+        script = (ROOT / 'self_hosted_worker' / 'START_LOCAL_WORKER_WINDOWS.ps1').read_text(encoding='utf-8')
+        guarded_import = "if($profileCode -eq 0){Import-EnvFile (Join-Path $PSScriptRoot '.auto_profile.env') $true}else{Write-Host 'Profil matériel auto indisponible: profil sûr.'"
+        self.assertIn(guarded_import, script)
+        self.assertNotIn("if($profileCode -ne 0){Write-Host 'Profil matériel auto indisponible: profil sûr.' -ForegroundColor Yellow};Import-EnvFile", script)
+
 
 if __name__ == '__main__':
     unittest.main()
