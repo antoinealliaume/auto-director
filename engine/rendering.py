@@ -39,7 +39,8 @@ def display_text(text,width=26,max_lines=2):
 
 
 def filter_path(path:Path):
-    return path.as_posix().replace('\\','/').replace(':','\\:').replace("'","\\'").replace(',','\\,')
+    value=path.as_posix().replace('\\','/')
+    return value.replace("'","\\\\\\'").replace(':','\\\\:').replace(',','\\,').replace('[','\\[').replace(']','\\]').replace(';','\\;')
 
 
 def _focus(value,default=.5):
@@ -91,7 +92,7 @@ def _motion_crop(motion):
 
 def _hook_drawtext(path,style,accent):
     p=filter_path(path);c='0x'+_accent(accent);base=max(34,int(W*.060))
-    common=f"textfile='{p}':line_spacing=8:x=(w-text_w)/2"
+    common=f"textfile={p}:line_spacing=8:x=(w-text_w)/2"
     if style=='cinema':return f"drawtext={common}:fontcolor=white:fontsize={max(30,int(base*.78))}:borderw=2:bordercolor=black@0.75:shadowx=2:shadowy=2:shadowcolor=black@0.6:y=h*.095"
     if style=='clean':return f"drawtext={common}:fontcolor=white:fontsize={max(30,int(base*.82))}:borderw=3:bordercolor=black@0.8:y=h*.09:box=1:boxcolor=black@0.28:boxborderw=12"
     if style=='retro':return f"drawtext={common}:fontcolor=black:fontsize={base}:borderw=1:bordercolor=black:y=h*.08:box=1:boxcolor={c}@0.90:boxborderw=13"
@@ -102,7 +103,7 @@ def _hook_drawtext(path,style,accent):
 
 
 def _caption_drawtext(path,style,accent):
-    p=filter_path(path);c='0x'+_accent(accent);base=max(27,int(W*.043));common=f"textfile='{p}':line_spacing=7:x=(w-text_w)/2"
+    p=filter_path(path);c='0x'+_accent(accent);base=max(27,int(W*.043));common=f"textfile={p}:line_spacing=7:x=(w-text_w)/2"
     if style=='highlight':return f"drawtext={common}:fontcolor=black:fontsize={base}:borderw=1:bordercolor=black:y=h*.735:box=1:boxcolor={c}@0.92:boxborderw=10"
     if style=='neon':return f"drawtext={common}:fontcolor={c}:fontsize={base}:borderw=4:bordercolor=black:shadowx=2:shadowy=2:shadowcolor={c}@0.3:y=h*.735"
     if style=='meme':return f"drawtext={common}:fontcolor=white:fontsize={max(30,int(base*1.08))}:borderw=5:bordercolor=black:y=h*.72"
@@ -162,8 +163,12 @@ def make_segment(src,out,start,duration,zoom,hook='',caption='',focus_x=.5,focus
     run(cmd,700)
 
 
+def _ffconcat_path(path:Path):
+    return path.as_posix().replace("'","'\\''")
+
+
 def _concat_segments(work,segments,out):
-    listing=work/f'{out.stem}.concat.txt';listing.write_text('\n'.join([f"file '{x.as_posix()}'" for x in segments]),encoding='utf-8')
+    listing=work/f'{out.stem}.concat.txt';listing.write_text('\n'.join([f"file '{_ffconcat_path(x)}'" for x in segments]),encoding='utf-8')
     run([FFMPEG,'-y','-f','concat','-safe','0','-i',str(listing),'-c:v','libx264','-preset',RENDER_PRESET,'-crf',str(RENDER_CRF),'-threads',str(FFMPEG_THREADS),'-c:a','aac','-b:a','160k','-movflags','+faststart',str(out)],1000)
 
 
