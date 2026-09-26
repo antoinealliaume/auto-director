@@ -1,0 +1,117 @@
+{
+  "generatedAt": "2026-09-26T18:07:59+00:00",
+  "repository": "antoinealliaume/auto-director",
+  "commit": "e995c8910cc8afe99fa59840cd7ac06235d846eb",
+  "status": "OK",
+  "counts": {
+    "critical": 0,
+    "warning": 0,
+    "info": 0
+  },
+  "failedChecks": 0,
+  "checks": [
+    {
+      "name": "Python compileall",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "Core unit tests",
+      "ok": true,
+      "code": 0,
+      "output": "test_ten_distinct_master_modules_exist (test_studio_master.StudioMasterTests.test_ten_distinct_master_modules_exist) ... ok\ntest_adaptive_controls_are_present_and_loaded_last (test_studio_v10.StudioV10Tests.test_adaptive_controls_are_present_and_loaded_last) ... ok\ntest_manual_publication_contract_remains_visible (test_studio_v10.StudioV10Tests.test_manual_publication_contract_remains_visible) ... ok\ntest_preferences_are_local_and_visual_only (test_studio_v10.StudioV10Tests.test_preferences_are_local_and_visual_only) ... ok\ntest_three_themes_density_sidebar_and_accessibility (test_studio_v10.StudioV10Tests.test_three_themes_density_sidebar_and_accessibility) ... ok\ntest_aggressive_style_keeps_render_values_bounded (test_style_engine.StyleEngineTests.test_aggressive_style_keeps_render_values_bounded) ... ok\ntest_auto_varies_styles_across_variants (test_style_engine.StyleEngineTests.test_auto_varies_styles_across_variants) ... ok\ntest_explicit_style_is_respected (test_style_engine.StyleEngineTests.test_explicit_style_is_respected) ... ok\ntest_public_styles_have_presets (test_style_engine.StyleEngineTests.test_public_styles_have_presets) ... ok\ntest_soft_intensity_bounds_speed_and_effects (test_style_engine.StyleEngineTests.test_soft_intensity_bounds_speed_and_effects) ... ok\ntest_unknown_style_falls_back_to_auto (test_style_engine.StyleEngineTests.test_unknown_style_falls_back_to_auto) ... ok\ntest_styled_segment_executes_in_ffmpeg (test_style_rendering.StyleRenderingSmokeTests.test_styled_segment_executes_in_ffmpeg) ... ok\ntest_transition_chain_executes_when_supported (test_style_rendering.StyleRenderingSmokeTests.test_transition_chain_executes_when_supported) ... ok\ntest_pull_token_is_asset_scoped (test_tiktok_security.TikTokSecurityTests.test_pull_token_is_asset_scoped) ... ok\ntest_token_encryption_round_trip (test_tiktok_security.TikTokSecurityTests.test_token_encryption_round_trip) ... ok\ntest_utf16_title_limit_handles_emoji (test_tiktok_security.TikTokSecurityTests.test_utf16_title_limit_handles_emoji) ... ok\ntest_export_has_clean_filename_and_manual_only_contract (test_v21_release.V21ReleaseTests.test_export_has_clean_filename_and_manual_only_contract) ... ok\ntest_production_smoke_contract (test_v21_release.V21ReleaseTests.test_production_smoke_contract) ... ok\ntest_release_version_is_consistent_across_api_and_ui (test_v21_release.V21ReleaseTests.test_release_version_is_consistent_across_api_and_ui) ... ok\ntest_restart_recovery_then_cancellation_is_safe (test_v21_release.V21ReleaseTests.test_restart_recovery_then_cancellation_is_safe) ... ok\ntest_security_versions_are_pinned_to_patched_lines (test_v21_release.V21ReleaseTests.test_security_versions_are_pinned_to_patched_lines) ... ok\ntest_worker_update_is_explicitly_manual (test_v21_release.V21ReleaseTests.test_worker_update_is_explicitly_manual) ... ok\ntest_aggressive_intensity_has_shorter_pace (test_v9_director.V9DirectorTests.test_aggressive_intensity_has_shorter_pace) ... ok\ntest_direct_hook_is_not_silent_fallback (test_v9_director.V9DirectorTests.test_direct_hook_is_not_silent_fallback) ... ok\ntest_segments_never_overrun_source (test_v9_director.V9DirectorTests.test_segments_never_overrun_source) ... ok\ntest_story_mode_restricts_strategy_family (test_v9_director.V9DirectorTests.test_story_mode_restricts_strategy_family) ... ok\ntest_api_version_metadata_is_v9_2_1 (test_v9_director.V9RouteTests.test_api_version_metadata_is_v9_2_1) ... ok\ntest_retry_does_not_write_null_critic_score (test_v9_director.V9RouteTests.test_retry_does_not_write_null_critic_score) ... ok\ntest_single_post_jobs_route (test_v9_director.V9RouteTests.test_single_post_jobs_route) ... ok\ntest_v9_meta_route_exists (test_v9_director.V9RouteTests.test_v9_meta_route_exists) ... ok\ntest_refresh_covers_core_workspace_and_mobile_layout (test_visual_refresh.VisualRefreshTests.test_refresh_covers_core_workspace_and_mobile_layout) ... ok\ntest_refresh_stylesheet_is_loaded_last (test_visual_refresh.VisualRefreshTests.test_refresh_stylesheet_is_loaded_last) ... ok\ntest_visual_layer_is_self_contained_and_keeps_manual_publication (test_visual_refresh.VisualRefreshTests.test_visual_layer_is_self_contained_and_keeps_manual_publication) ... ok\ntest_agent_versions_are_consistent_in_all_heartbeat_paths (test_worker_diagnostics.WorkerDiagnosticsTests.test_agent_versions_are_consistent_in_all_heartbeat_paths) ... ok\ntest_diagnostic_states_cover_idle_offline_incompatible_busy_and_ready (test_worker_diagnostics.WorkerDiagnosticsTests.test_diagnostic_states_cover_idle_offline_incompatible_busy_and_ready) ... ok\ntest_heartbeat_age_is_safe_and_non_negative (test_worker_diagnostics.WorkerDiagnosticsTests.test_heartbeat_age_is_safe_and_non_negative) ... ok\ntest_retry_queue_and_heartbeat_age_are_exposed_to_ui (test_worker_diagnostics.WorkerDiagnosticsTests.test_retry_queue_and_heartbeat_age_are_exposed_to_ui) ... ok\n\n----------------------------------------------------------------------\nRan 84 tests in 0.993s\n\nOK"
+    },
+    {
+      "name": "pip dependency consistency",
+      "ok": true,
+      "code": 0,
+      "output": "No broken requirements found."
+    },
+    {
+      "name": "JS syntax: app.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: publication.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: secure-media.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: studio-master.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: studio-polish.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: studio-v10.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "JS syntax: worker-status.js",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: app/static/Install-AutoDirector.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: self_hosted_worker/START_LOCAL_WORKER_WINDOWS.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: self_hosted_worker/local_agent.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "PowerShell syntax: self_hosted_worker/run_worker_logged.ps1",
+      "ok": true,
+      "code": 0,
+      "output": ""
+    },
+    {
+      "name": "Ruff fatal/static errors",
+      "ok": true,
+      "code": 0,
+      "output": "All checks passed!"
+    },
+    {
+      "name": "Dependency vulnerability audit",
+      "ok": true,
+      "code": 0,
+      "output": "No known vulnerabilities found"
+    },
+    {
+      "name": "Worker installer version alignment",
+      "ok": true,
+      "code": 0,
+      "output": "{\"agent\": \"2.8\", \"expected\": \"2.8\", \"zip_cache\": \"2.8\", \"bat_cache\": \"2.8\", \"bat_banner\": \"2.8\"}"
+    }
+  ],
+  "findings": []
+}
